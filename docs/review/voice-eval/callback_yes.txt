@@ -1,0 +1,22 @@
+Says yes (callback; agent claude-sonnet-5; ended agent_end_call; 3 agent turns, 18.5 words/turn)
+
+  0 FIXIE : Hi Dorothy, it's Fixie, the AI assistant you called at 4:07 PM about your dryer. This call is recorded. I found your part for $13.05 total with shipping, arriving Tuesday. Want me to order it?
+  1 CALLER: Oh yes, please order it. [decision=yes]
+   [tool record_order_decision({"approved":true}) → Done, I ordered the part. I'll call you when it arrives to help you install it. Is there anything else I can help you with?]
+  3 FIXIE : Great, ordering that now for you. Done, I ordered the part. I'll call you when it arrives to help you install it. Is there anything else I can help you with?
+  4 CALLER: No, that's all, thank you so much. Goodbye now. [decision=yes]
+   [tool end_call({}) → Call ended.]
+  6 FIXIE : You're welcome, Dorothy. Goodbye, take care!
+
+Checks:
+max_turns: pass
+concise: pass
+no_payment: pass
+no_filler: pass
+states_price: pass (checker false positive (judge): In turn 0, before the caller decided, the agent clearly said the part was "$13.05 total with shipping", so the flag is a false positive.)
+decision_recorded: pass
+approval_truthful: pass
+no_part_number: pass
+no_supplier_name: pass
+price_truthful: pass
+no_commit: pass

@@ -22,7 +22,10 @@ export type ToolName =
   | 'install_progress'
   | 'safety_ack'
   | 'report_fix'
-  | 'record_test';
+  | 'record_test'
+  | 'lookup_caller'
+  | 'end_call'
+  | 'record_knowledge';
 
 /** Everything we know about one phone call. Registered by the dialer, or by the webhook for inbound calls. */
 export interface CallCtx {

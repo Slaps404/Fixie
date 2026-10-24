@@ -1,15 +1,18 @@
 import { STATE_LABEL, type JobState } from '@/lib/types';
 
+const warm = 'bg-warm/10 border-warm/40 text-warm';
+const fault = 'bg-fault/10 border-fault/40 text-fault';
+
 const tone: Partial<Record<JobState, string>> = {
-  FIXED: 'bg-green-100 text-green-900 border-green-700',
-  STOPPED: 'bg-red-100 text-red-900 border-red-700',
-  ESCALATED: 'bg-amber-100 text-amber-900 border-amber-700',
-  DECLINED: 'bg-red-100 text-red-900 border-red-700',
+  FIXED: warm,
+  STOPPED: fault,
+  ESCALATED: warm,
+  DECLINED: fault,
 };
 
 export function StateBadge({ state }: { state: JobState }) {
   return (
-    <span className={`inline-block rounded-full border-2 px-3 py-1 text-base font-bold ${tone[state] ?? 'bg-blue-50 text-blue-900 border-blue-700'}`}>
+    <span className={`inline-block rounded-full border px-3 py-1 text-base font-semibold ${tone[state] ?? 'bg-accent/10 border-accent/40 text-accent'}`}>
       {STATE_LABEL[state] ?? state}
     </span>
   );

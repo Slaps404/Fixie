@@ -127,7 +127,7 @@ Judge only what is visible. Do not read out the text.`;
 
 const EXTRACT_PROMPT = `Read the printed text in this photo from a caller's appliance repair. Copy characters exactly as printed; never guess or complete a number you cannot see. Use "" for anything not visible and 0 for its confidence.
 - Nameplate/rating sticker: brand, model (the value after MODEL / MOD / M/N, without the label word), serial (after SERIAL / S/N). model_confidence = how sure you are every character of the model is right.
-- Receipt: store name and purchase_date as YYYY-MM-DD. date_confidence likewise.
+- Receipt: store = the store or chain name only (e.g. "Home Depot"), no address or store number; purchase_date as YYYY-MM-DD. date_confidence likewise. Leave model empty unless it is a nameplate.
 - Part label: part_numbers as printed. part_confidence likewise.
 Set legible=false if glare, blur or angle makes any of those characters uncertain. If two images are given, the second is a zoomed crop of the first.`;
 

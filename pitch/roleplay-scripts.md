@@ -64,15 +64,21 @@ Answer: "Hi, can you hold one moment?" Then **say nothing**. After about 20 s wi
 ---
 
 ## 6. Dorothy (Jianan or a judge; never looks at a screen)
-**Call 1: intake (~40 s).** Say it **all in one breath**:
+**Call 1: intake + tests (~45 s).** Open with it **all in one breath**:
 > "Hi, my Whirlpool dryer runs but there's no heat. The model is W-E-D-4-8-1-5-E-W. I bought it in 2019."
-- *(Agent: OK to continue and call you back on this number?)* → "Yes, that's fine."
-- *(Agent reads the model back once, in chunks.)* → "That's right."
+- *(OK to continue and to call you back on this number?)* → "Yes, that's fine."
+- *(Model readback, once, in chunks.)* → "That's right."
+- Then Fixie runs **tests**. Each answer moves the probability bar on the board:
+  - *(Breakers: are both on, or is one tripped?)* → "**Both are on.**"
+  - *(Does the drum turn and tumble?)* → "**Yes, it turns.**"
+  - *(Any warmth at all after five minutes?)* → "**No, completely cold.**"
+  - *(Optional, if she "has a meter": dryer unplugged, probes on the fuse tabs. Beep or silent?)* → "**It's unplugged… it stays silent.**" That's the big jump: thermal fuse goes to about 98%.
+  - If the agent asks something you didn't expect, answer plainly. **Never say "I don't know"** unless you want to show the ambiguous-reading gate.
 - *(Vent warning, "I'll call you back.")* → "Okay, thank you." **Hang up.** Sourcing starts when you hang up.
 
-**Call 2: callback (~20 s)**
-- *(Agent: "Hi Dorothy, it's Fixie, the AI assistant you called at 7:46 about your dryer… WP3392519, PartsDirect, $13.05 total, Tuesday. Say 'order it'.")*
-- → "**Order it.**" (Say exactly that. "Yes" alone may not count.)
+**Call 2: callback (~15 s).** The callback no longer names the supplier or part number unless you ask.
+- *(Fixie: price, arrival day, "Say 'order it'.")* → "**Order it.**" (Exactly those words.)
+- *(Fixie: "Done, I ordered the part… Is there anything else I can help you with?")* → "**No, that's all. Thank you.**"
 
 **Call 3: delivery + install (~40 s, after the hidden hotkey)**
 - *(Agent: "Your part arrived. Want to install it together?")* → "Yes."

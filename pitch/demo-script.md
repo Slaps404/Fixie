@@ -1,8 +1,19 @@
 # Fixie: 3-minute demo script
 
 **Tracks:** **No App** (primary) + **Unsupervised** (+ **Dispatch** if the port beat ships and the organizers allow multi-track).
-**Problem (1 line):** When a dryer breaks, the fix is usually a $17 part and 15 minutes. But finding the right part takes a screen, a search, and hours on hold, so people pay about $150 for a visit or live without it.
-**Promise:** *Assistants tell you how to fix it. Fixie gets the part on its way, then walks you through installing it.*
+**Problem (1 line):** When a dryer breaks, the fix is usually a ~$13 part and 15 minutes. But getting there takes a screen, a search, and hours on hold, so people pay up to $200 for a visit or live without it.
+**Positioning (issue #14): concede the plumbing, claim the loop.**
+- **Concede:** OpenClaw, Google AI Mode, Gemini "Call for Me", and Meta Muse can all call businesses. **Calling is plumbing.** Never say "OpenClaw can't."
+- **Claim:**
+  - one number from any phone, no app
+  - a diagnosis by **tests**, with a probability bar that moves
+  - a hard safety gate
+  - parallel sourcing of the **identical part**
+  - a spoken "order it"
+  - a delivery call, a guided install, and a **verified fix**
+  - every spend and call limit **enforced in code**
+- **Bigger story:** *"Fixed, or we pay the pro."* The maintenance department for homes that don't have one. Every callback-verified fix is outcome data that prices the next guarantee. Say **"simulated pricing"**; it is not underwriting.
+- **Last line on stage:** ***"The order is mocked; the caps are real code."***
 
 ## Roles on stage
 - **Presenter** (Lane B): narrates and points at the board.
@@ -17,15 +28,17 @@
 
 | Time | Beat | Say (presenter) | Board shows |
 |---|---|---|---|
-| **0:00–0:10** | **Hook** | "Dorothy, 74. Her dryer won't heat. She never sees a screen. Friends are playing the parts counters tonight." | Empty board, OPERATOR AUDIT VIEW |
-| **0:10–0:50** | **1. Live intake** | *(Dorothy says it all in one breath: dryer, no heat, model, 2019.)* "One readback of the model number, a safety gate (electric is DIY once unplugged, gas goes to a pro), and consent to call back on this number. She hangs up." | Dorothy lane · consent ✓✓ · Diagnosed · thermal fuse WP3392519 · DIY with caution |
-| **0:50–1:30** | **2. Four calls at once** | "Now it works **on its own**. Warranty line: expired. PartsDirect reads back the part number, **$9.10 plus $3.95**. Valley says **$55 plus $4**: that's $59 landed, over her $40 cap, so the **guard skips it**. Coast doesn't pick up: **no-answer guard**, no retry. All in code, not the prompt." | 4 lanes side by side · **ticker:** "Valley quoted $59.00 landed. Over the $40 budget, skipped." · struck-through Valley row · PartsDirect **CHEAPEST $13.05** |
-| **1:30–1:55** | **3. Callback + "order it"** | "Fixie calls the number that called in and says when she called, so it's not a scam call. Nothing is bought until she says the words." *(Dorothy: "Order it.")* | ORDERED pill · **$186.95 saved vs tech visit · $45.95 vs next-best** · budget $13.05 / $40 · Fixie's own spend meter |
-| **1:55–2:35** | **4. Delivery + install** | *(Jianan presses **D**: a simulated UPS webhook.)* "Tuesday. The box lands, and Fixie calls **her** again." *(Dorothy: "It's unplugged, the vent's clear, the panel's off, I'm holding the fuse.")* "Two safety acks, so it skips ahead. Is it warm?" *(Dorothy: "It's warm!")* | Delivery banner · ✓ Unplugged ✓ Vent cleared · steps skipped · **FIXED** |
-| **2:35–2:50** | **5. Port fault (simulated, labeled)** | *(Jianan presses **P**.)* "A simulated fleet-telematics webhook. A terminal tractor at the Port of San Diego throws SPN 3226. Same engine: it refuses the high-voltage and exhaust work and sources for the certified tech. Dorothy needs no screen; the tech needs no hands." | 🚨 YT-07 job tab · **SIMULATED** badge · Pro only |
-| **2:50–3:00** | **Close** | "Two numbers: **$186.95** vs a tech visit, **$45.95** vs the next quote, same part number. Who pays: home-warranty companies, insurers, senior living, per resolved case. **Fixie gets the part on its way.**" | Click the 👵 Dorothy tab to return to the counters |
+| **0:00–0:10** | **Hook** | "Any agent can make a phone call now. Calling is plumbing. Dorothy is 74, her dryer won't heat, and she never sees a screen. Watch what happens *around* the calls. Friends are playing the parts counters tonight." | Empty board, OPERATOR AUDIT VIEW |
+| **0:10–0:55** | **1. Live intake + diagnosis by test** | *(Dorothy: dryer, no heat, model, 2019. Then she answers the tests.)* "It doesn't guess. Breakers on, drum turns, no warmth at all. Then, **dryer unplugged**, she touches the meter to the fuse: silent. Watch the bar: **P(thermal fuse) 0.51 → 0.98**. The likelihoods are expert-written, not learned; every confirmed fix tunes them. Gas would go straight to a pro." | **Probability bars move** with a reason line · consent ✓✓ · thermal fuse WP3392519 · DIY with caution |
+| **0:55–1:30** | **2. Four calls at once: agent proposes, code approves** | "She hangs up, and Fixie works **on its own**. Warranty: expired. PartsDirect reads back the part number, $9.10 plus $3.95. Valley proposes $59 landed, and **code blocks it**: over her $40 cap. Coast doesn't answer, so it's skipped with no retry. Look at the decision log: every proposal, ✅ or ⛔, with the rule that decided it." | 4 lanes · ticker: *"Valley quoted $59.00 landed. Over the $40 budget, skipped."* · decision log ⛔/✅ rows · strip: **calls 4/8 · parallel vs serial · guards fired 2** |
+| **1:30–1:50** | **3. Callback + "order it"** | "It calls back the number that called in. It names the price and the day, nothing she has to parse. Money moves only on her words." *(Dorothy: "Order it." Fixie: "Done, I ordered the part… anything else?" Dorothy: "No, that's all.")* | Decision log row: ✅ **🗣 DOROTHY** "Spoken 'order it'" · **$186.95 vs tech visit · $45.95 vs next-best** · $13.05 / $40 committed |
+| **1:50–2:30** | **4. Delivery + install + verified fix** | *(Jianan presses **D**: a simulated UPS webhook.)* "Tuesday. The box lands, and Fixie calls **her**." *(Dorothy: "It's unplugged, the vent's clear, the panel's off, I'm holding the fuse.")* "Two safety acks, enforced server-side. Is it warm?" *(Dorothy: "It's warm!")* "**That callback is the data a guarantee is priced on.**" | Install banner · ✓ Unplugged ✓ Vent cleared · **FIXED** |
+| **2:30–2:45** | **5. Port fault (simulated, labeled)** | *(Jianan presses **P**.)* "A simulated telematics webhook. A port tractor throws SPN 3226. Same engine; it refuses the high-voltage and exhaust work and sources for the certified tech." | 🚨 YT-07 tab · **SIMULATED** · Pro only |
+| **2:45–3:00** | **Close** | "Any agent can make the call. **Fixie closes the loop and stands behind the result**: fixed, or we pay the pro, at simulated pricing today. 75% of adults over 50 want to age in place; this is the maintenance department for their homes. **The order is mocked; the caps are real code.**" | Back to the 👵 Dorothy tab: both counters, decision log |
 
-**If behind schedule:** shorten beat 4 to the one-breath acks and "It's warm!" Never cut the **guard ticker** or **"order it"**.
+*Optional runaway beat (only if time and a 5th "Hold Forever" actor exist):* Hold answers and goes silent → stuck guard trips → presenter presses **X** (kill switch) live → STOPPED pill, and every live call ends. Otherwise keep `X` for Q&A.
+
+**If behind schedule:** drop the port beat first, then shorten beat 4 to the one-breath acks and "It's warm!" Never cut the **probability bar**, the **decision log ⛔ row**, or **"order it"**.
 **If a live leg fails:** don't debug on stage. Go down the fallback ladder, and say "this leg is simulated; the badge says so."
 
 ## Track talking points (weave into beats 2–4)
@@ -59,7 +72,7 @@
 2. **2.1x:** the same Whirlpool part number, WP3392519, costs **$16.95** at one real seller and **$35.56** at another. *(Tonight's $9.10 / $55 quotes are role-play numbers.)*
 3. **$3.0 billion:** fraud losses reported by adults 60+ in 2025, 5x 2020 (FTC). A known, fair price is the opposite of an upsell.
 4. **About 2,900 home dryer fires a year**; failure to clean is the leading cause (U.S. Fire Administration).
-5. **3.1 billion people** live under mobile coverage but don't use mobile internet (GSMA). A phone call is the universal interface.
+5. **75% of adults 50+ want to age in place** ([AARP, Dec 2024](https://www.aarp.org/press/releases/2024-12-10-new-aarp-report-majority-adults-50-plus-age-place-policies-communities-catch-up.html)). Their homes have no maintenance department. *(Don't use the unverified "50M homes".)*
 
 *Enterprise backups:*
 - The **Army created an HVAC repair task force on Oct 15, 2026** (Defense News).
@@ -70,14 +83,30 @@
 
 ---
 
-## 30-second pitch (dryer version)
-> "Meta glasses and ChatGPT will tell you to check your dryer's thermal fuse. Then you're on hold with parts counters, on a screen, for an afternoon. **Fixie is the agent that makes those calls.** Call one number from any phone. It diagnoses by voice, refuses dangerous repairs, checks your warranty, calls suppliers in parallel for the identical part, and rings back: *'Thirteen dollars delivered, arriving Tuesday. Say "order it".'* When the box lands, it calls again and walks you through the install. The same engine fires when a port tractor throws a fault code at 4 a.m., before the ship docks. **Fixie gets the part on its way.**"
+## 30-second pitch (issue #14 version)
+> "Dorothy's 74, and her dryer won't heat. A tech visit runs up to $200; the fix is a thirteen-dollar fuse. She calls one number, no app. Fixie tests the fuse with her by voice, refuses anything involving gas, phones the suppliers in parallel, and orders on her spoken 'order it', within limits its own code enforces. When the part arrives, it calls her, walks her through the install, and confirms the heat is back. Every confirmed fix becomes data that lets us guarantee the next one. **Any agent can make a phone call. Fixie closes the loop and stands behind the result.** The same engine runs port tractors."
 
----
+**Two sentences for "isn't this OpenClaw with a phone skill?":**
+> "Yes, OpenClaw can place these calls, and we'd use it as a commodity layer. What a personal agent won't do is take a call from a 74-year-old with a flip phone, refuse the gas repair, enforce spend limits it can't override, and call back to check the fix worked. That check is the data that lets us guarantee the repair."
 
 ## Hard Q&A (one breath each)
 
-**"Google already calls businesses."**
+**"Isn't this just OpenClaw with a phone skill?"**
+The two sentences above. Then point at the probability bar and the decision log: "The model proposes; deterministic code approves."
+
+**"Google already calls shops."**
+"Google gathers quotes. It doesn't diagnose, gate safety, buy, call back, or verify the fix."
+
+**"You have zero loss data. How can you guarantee anything?"**
+"Correct, n = 0 today. Pricing is simulated from eval runs, and the pilot guarantee is capped at the part plus one visit."
+
+**"You're not licensed to sell insurance."**
+"Phase 1 is a capped service guarantee, not insurance. Phase 2 goes through a licensed carrier or MGA." *(The legal details are unverified; don't go deeper.)*
+
+**"What if she misreads the meter?"**
+"Ambiguous readings never pass the gate. Two unknowns and we escalate to a pro."
+
+**"Google already calls businesses." (long form)**
 It does: local services, from Search, with results by text or email. We call **distributors by part number**, from **any phone**, with a **safety gate** and a **spoken-yes order**, and we **follow through to the install**.
 
 **"Voice agents are a commodity."**

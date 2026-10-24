@@ -30,8 +30,8 @@ export const config = {
     budget: num(process.env.CAP_BUDGET, 40),
     maxCallSeconds: num(process.env.CAP_MAX_CALL_SECONDS, 180),
     maxCallsPerVendor: num(process.env.CAP_MAX_CALLS_PER_VENDOR, 2),
-    stuckSeconds: num(process.env.CAP_STUCK_SECONDS, 35),
-    sourcingTimeoutSeconds: num(process.env.CAP_SOURCING_TIMEOUT_SECONDS, 75),
+    stuckSeconds: num(process.env.CAP_STUCK_SECONDS, 90),
+    sourcingTimeoutSeconds: num(process.env.CAP_SOURCING_TIMEOUT_SECONDS, 150),
     /** Start sourcing this long after start_job if the intake call hasn't reported ended. */
     sourcingFallbackSeconds: num(process.env.CAP_SOURCING_FALLBACK_SECONDS, 25),
   },
@@ -42,8 +42,8 @@ export const config = {
   /** Max call length per lane, seconds. */
   maxSec: {
     user: num(process.env.MAXSEC_USER, 90),
-    warranty: num(process.env.MAXSEC_WARRANTY, 60),
-    supplier: num(process.env.MAXSEC_SUPPLIER, 60),
+    warranty: num(process.env.MAXSEC_WARRANTY, 120),
+    supplier: num(process.env.MAXSEC_SUPPLIER, 120),
     delivery: num(process.env.MAXSEC_DELIVERY, 480),
     tech: num(process.env.MAXSEC_TECH, 60),
   } as Record<Lane, number>,

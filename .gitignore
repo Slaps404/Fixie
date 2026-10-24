@@ -8,3 +8,5 @@ server/data/quotes.jsonl
 .DS_Store
 server/data/roster.json
 .verify-artifacts/
+server/data/vault.json
+server/data/customers.json

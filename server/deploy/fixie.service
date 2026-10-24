@@ -1,0 +1,26 @@
+[Unit]
+Description=Fixie live phone line (tunnel + server + watchdog)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/.t3/projects/compiled/server
+# Lane modes for the demo. Secrets stay in server/.env (loaded by the app via dotenv).
+Environment=DRY_RUN=0
+Environment=MODE_WARRANTY=sim
+Environment=MODE_SUPPLIER=sim
+Environment=MODE_TECH=sim
+Environment=MODE_USER=live
+Environment=MODE_DELIVERY=live
+Environment=PORT=3000
+ExecStart=/root/.t3/projects/compiled/server/scripts/supervise.sh
+# Never cut a live call: wait (max 5 min) until Vapi reports no active calls before stopping/restarting.
+ExecStop=/usr/bin/node --import tsx /root/.t3/projects/compiled/server/scripts/wait-for-calls.mts
+Restart=always
+RestartSec=2
+KillMode=control-group
+TimeoutStopSec=330
+
+[Install]
+WantedBy=multi-user.target

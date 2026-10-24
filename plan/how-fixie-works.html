@@ -445,6 +445,8 @@ await provider.createCall(...)       // first await comes after</pre>
 
   <details class="qa"><summary>"Voice agents are a commodity. What's the moat?"</summary><div class="a"><p>The voice agent is the commodity. The moat is the loop's data: model → part → cross-refs → price and stock per counter, plus <b>verified-fix outcomes</b> from the delivery callback. A personal agent never collects that, and we can underwrite a guarantee against it. It's seeded today, and we say so.</p></div></details>
 
+  <details class="qa"><summary>"What if the server crashes mid-call?"</summary><div class="a"><p>The line runs as a systemd service with a watchdog. It checks the server's health and the public tunnel every 10 seconds, and restarts whichever one died. Job state survives a restart: every state change is snapshotted to disk and reloaded on boot. On boot, the server also re-points the Vapi assistant at the current tunnel URL. We never restart in the middle of a call: deploys wait until Vapi reports no active calls. Recovering webhooks that arrive while it's down is what we're building next.</p></div></details>
+
   <details class="qa"><summary>"What if the diagnosis is wrong?"</summary><div class="a"><p>A $13 part is the cheapest wrong guess in the house. The delivery call verifies the fix by voice ("Is it warm?"). If it isn't, the job escalates to an install-only pro. Next is #11: live multimeter tests that move the probability before we buy anything.</p></div></details>
 </section>
 

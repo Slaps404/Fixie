@@ -1,22 +1,17 @@
-import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
-import { NextResponse } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
+import { SESSION_COOKIE, readSession } from '@/lib/session-token';
 
-const isDashboard = createRouteMatcher(['/dashboard(.*)']);
-const isApi = createRouteMatcher(['/api/fixie(.*)']);
+export function proxy(req: NextRequest) {
+  const signedIn = readSession(req.cookies.get(SESSION_COOKIE)?.value);
+  if (signedIn) return NextResponse.next();
 
-export default clerkMiddleware(async (auth, req) => {
-  if (isDashboard(req)) {
-    await auth.protect();
-  } else if (isApi(req)) {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  if (req.nextUrl.pathname.startsWith('/api/')) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
-}, { signInUrl: '/sign-in', signUpUrl: '/sign-up' });
+  const url = req.nextUrl.clone();
+  url.pathname = '/get-started';
+  url.search = `?signin=1&next=${encodeURIComponent(req.nextUrl.pathname)}`;
+  return NextResponse.redirect(url);
+}
 
-export const config = {
-  matcher: [
-    // Skip Next internals and static files
-    '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
-    '/(api|trpc)(.*)',
-  ],
-};
+export const config = { matcher: ['/dashboard/:path*', '/api/fixie/:path*'] };

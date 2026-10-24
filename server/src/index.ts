@@ -22,6 +22,8 @@ const mount = async (path: string) => {
 };
 await mount('./vapi/webhook.ts');
 await mount('./routes.ts');
+await mount('./notify/whatsapp.ts');
+await mount('./admin/routes.ts');
 
 app.listen(config.port, () => {
   console.log(`Fixie server on :${config.port}  dryRun=${config.dryRun}  publicUrl=${config.publicUrl || '(unset)'}`);

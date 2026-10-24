@@ -3,14 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "predev": "node scripts/ensure-clerk-dev-keys.mjs",
     "dev": "next dev -p 3100",
     "build": "next build",
     "start": "next start -p 3100",
-    "clerk:claim": "node scripts/ensure-clerk-dev-keys.mjs --claim"
+    "verify:create": "node scripts/create-verify-service.mjs",
+    "stripe:create": "node scripts/create-stripe-price.mjs"
   },
   "dependencies": {
-    "@clerk/nextjs": "^7.9.20",
     "next": "^16.4.3",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",

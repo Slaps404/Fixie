@@ -62,6 +62,11 @@ function partFor(row: SymptomRow): PartInfo | null {
   return catalog.parts[row.partNumber] ?? null;
 }
 
+/** Catalog entry by exact part number (used when diagnosis names the part but the caller's model is unknown). */
+export function partByNumber(partNumber: string | undefined): PartInfo | null {
+  return partNumber ? (catalog.parts[partNumber] ?? null) : null;
+}
+
 export const parts: Parts = {
   lookup(model, symptom) {
     const m = norm(model);

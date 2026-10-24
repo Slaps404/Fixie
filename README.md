@@ -70,6 +70,17 @@ npm run verify          # checks the run end to end
 2. Start a tunnel, set `PUBLIC_URL`, and run `npm run setup:vapi` and `npm run preflight`.
 3. Make a real call and check each lane against [docs/VERIFY.md](docs/VERIFY.md).
 
+## Card handling
+
+- **Test card only.** The phone order lane accepts only the Stripe test card `4242 4242 4242 4242`. `server/src/commerce/vault.ts` refuses any other number unless `ALLOW_REAL_CARDS=1` is set. Don't set it for the demo.
+- **Encrypted at rest.** Cards are stored with AES-256-GCM. The key is `CARD_ENC_KEY` (32 bytes, base64: `openssl rand -base64 32`). Everything else sees a token and the last 4 digits.
+- **Released by the server, not the agent.** On the order call, the agent gets the number only through the `read_card` tool, and only if three checks pass:
+  - the call is to the winning vendor's roster number;
+  - the vendor has stated a total at or under the approved one;
+  - the order was approved by voice.
+- **Not stored by Vapi.** The order call has recording, logging, and transcripts off, and Vapi PCI mode on. Our own transcripts are redacted.
+- **Still heard in the call.** Vapi's transcriber and LLM still process the spoken number. That's why production should use a single-use virtual card capped at the order total (see `docs/issues/16-real-ordering.md`).
+
 ## Honest notes
 
 - **Suppliers are role-played by friends**, with prices taken from real listings.

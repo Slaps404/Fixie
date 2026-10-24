@@ -19,8 +19,11 @@ const TOOL_NAMES: ToolName[] = [
   'safety_ack',
   'report_fix',
   'record_test',
+  'lookup_caller',
+  'record_knowledge',
+  'end_call',
 ];
-const FALLBACK_RESULT = 'Sorry, one moment.';
+const FALLBACK_RESULT = 'Saved. Keep the conversation going.';
 /** Tool replies must leave in < 1 s. */
 const TOOL_BUDGET_MS = 900;
 const UNKNOWN_WAIT_MS = 3000;

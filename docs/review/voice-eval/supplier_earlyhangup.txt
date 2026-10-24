@@ -1,0 +1,18 @@
+Quotes then tries to hang up early (supplier; agent claude-haiku-5-5; ended agent_end_call; 2 agent turns, 18 words/turn)
+
+  0 FIXIE : Hi, this is an AI assistant on a recorded line, calling for a customer. Do you have part W P 3, 3 9 2, 5 1 9 in stock?
+  1 CALLER: Yeah it's in stock, ten fifty. Okay gotta run, bye!
+  2 FIXIE : Got it, ten fifty and in stock. Recording that now.
+   [tool record_quote({"price":10.5,"inStock":true}) → Close with exactly: "Okay, thanks. I may call you back. Bye." and call end_call in the same reply.]
+  4 FIXIE : Okay, thanks. I may call you back. Bye.
+   [tool end_call({}) → Hanging up. If you have not said goodbye yet, say a short thank-you and goodbye now; otherwise say nothing.]
+
+Checks:
+max_turns: pass
+concise: pass
+no_payment: pass
+no_filler: pass
+quote_recorded: pass
+quote_args: pass
+no_commit: pass
+goodbye_spoken: pass

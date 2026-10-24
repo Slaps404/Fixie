@@ -10,6 +10,8 @@ export interface Hypothesis {
   short: string;
   prior: number;
   partNumber?: string;
+  /** Short spoken fix for this cause, e.g. "a cheap thermal fuse ...". */
+  fix?: string;
 }
 
 export interface FaultTest {
@@ -24,6 +26,8 @@ export interface FaultTest {
   safetyCost: number;
   requiresAck: string[];
   needsMeter: boolean;
+  /** Term the caller must understand to do this test (memory.ts CONCEPTS); skipped for callers who don't. */
+  concept?: string;
 }
 
 export interface FaultTree {

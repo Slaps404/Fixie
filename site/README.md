@@ -1,60 +1,46 @@
 # Fixie site
 
-Landing page, sign-in, and a caregiver/operator dashboard for Fixie. Next.js (App Router, TypeScript), Tailwind, Clerk.
+Landing page, phone-and-card signup, and an operator dashboard for Fixie. Next.js (App Router, TypeScript), Tailwind.
 
 ## Run
 
 ```bash
 cd site
+cp .env.example .env.local   # then fill in the values
 npm install
-npm run dev          # http://localhost:3100
+npm run dev                  # http://localhost:3100
 ```
 
 The Fixie backend (`server/`) should be running; by default it is at `http://localhost:3000`.
 
-`npm run build && npm start` serves the production build on port 3100. A production build needs real Clerk keys (see below).
-
 ## Pages
 
-- `/` public landing page (click-to-call `tel:+16197711086`)
-- `/sign-in`, `/sign-up` Clerk sign-in (phone number OTP and Google)
-- `/dashboard` jobs list (protected)
-- `/dashboard/jobs/:id` job detail: live timeline, quotes (rejected rows struck through with the reason), guard events, "Stop job" (protected)
+- `/` landing page (click-to-call `tel:+16197711086`)
+- `/get-started` sign up: phone number, text-message code, then the card. `/get-started?signin=1` signs in with just the code.
+- `/welcome` "You're in!" with the number and an "Add Fixie to contacts" download (`/contact.vcf`)
+- `/dashboard` jobs list, `/dashboard/jobs/:id` live timeline, quotes, guard events and the Stop button. Requires a session.
 
-## Auth (Clerk, zero-config in dev)
+## Sign-in (no third-party auth service)
 
-Installed `@clerk/nextjs` 7.x no longer auto-creates keys inside the middleware, so true in-framework keyless mode does not work with it. `npm run dev` first runs `scripts/ensure-clerk-dev-keys.mjs`. If no Clerk keys are configured, it asks Clerk for a temporary "accountless" dev instance (no account needed, the same mechanism as `npx clerk init`) and writes the keys to `.env.local`, which is gitignored. So it works with no setup.
+1. The phone number gets a 6-digit text from **Twilio Verify**. Verify needs no 10DLC registration.
+2. A correct code sets a signed, httpOnly cookie (`fixie_session`, HMAC-SHA256 with `SESSION_SECRET`, 30 days).
+3. `proxy.ts` sends signed-out visitors from `/dashboard` to `/get-started?signin=1` and returns 401 for `/api/fixie/*`.
 
-To keep that instance, run `npm run clerk:claim` and open the printed URL. Or create your own app at https://dashboard.clerk.com.
+The cookie only proves control of a phone number. Anyone with a session can see the dashboard, which is the same as the old Clerk behavior.
 
-### Where to put Clerk keys later
+## Keys
 
-Put them in `site/.env.local` (never commit it):
+See `.env.example`. One-time setup scripts, both read `.env.local` and never print secrets:
 
+```bash
+npm run verify:create   # makes a Twilio Verify service, prints TWILIO_VERIFY_SERVICE_SID
+npm run stripe:create   # makes the $9/mo "Fixie Family Plan" test product, prints STRIPE_PRICE_ID (sk_test_ keys only)
 ```
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_...
-CLERK_SECRET_KEY=sk_...
-```
 
-The script leaves your keys alone once both are set. In the Clerk dashboard under User & Authentication, enable **Phone number** (with SMS code verification) and **Google** as sign-in methods. Those are dashboard settings, not code.
+`SIGNUP_TEST_MODE=1` lets signup work with no Twilio or Stripe keys (code `000000`, card step labelled "Test mode: card step simulated"). Never set it on anything the public can reach.
 
-## Environment variables
+Card details go to Stripe Checkout (subscription mode). The site never sees them. The return page checks with Stripe that the session is complete and belongs to the signed-in phone number before saying "You're in".
 
-See `.env.example`.
+## Production
 
-| Var | Purpose |
-|---|---|
-| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Clerk publishable key (public by design) |
-| `CLERK_SECRET_KEY` | Clerk secret key (server only) |
-| `FIXIE_API_URL` | Fixie backend base URL, default `http://localhost:3000` |
-| `FIXIE_ADMIN_TOKEN` | Sent as `x-admin` by route handlers, server-side only. Needed for "Stop job" |
-
-## How the backend is reached
-
-The browser only talks to Next.js route handlers under `app/api/fixie/`:
-
-- `GET /api/fixie/jobs`, `GET /api/fixie/jobs/:id`
-- `POST /api/fixie/jobs/:id/stop` (adds `x-admin` on the server)
-- `GET /api/fixie/events` (SSE pass-through of the backend `/events`, events `fixie` and `reset`)
-
-`proxy.ts` (Clerk middleware) protects `/dashboard/**`, and returns 401 for `/api/fixie/**` when signed out. `FIXIE_ADMIN_TOKEN` is read only in `lib/fixie.ts` (`server-only`).
+`npm run build && npm start` serves on port 3100.

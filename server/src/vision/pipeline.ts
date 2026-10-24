@@ -4,7 +4,7 @@ import { vemit as sinkEmit } from './emit.ts';
 import { config } from '../config.ts';
 import { calls } from '../calls.ts';
 import { jobs } from '../jobs.ts';
-import { CONFIDENT, KIND_GOALS, nextStep, openGoals, rankImages, rankReason } from './policy.ts';
+import { CONFIDENT, currentAsk, KIND_GOALS, nextStep, openGoals, rankImages, rankReason } from './policy.ts';
 import { stubClassify, TIER2_MODEL, TIER3_MODEL, visionModel } from './llm.ts';
 import { store } from './store.ts';
 import type { Ask, Extraction, Facts, ImageKind, VisionImage, VisionSession } from './types.ts';
@@ -104,20 +104,24 @@ async function runOnce(s: VisionSession): Promise<void> {
   // ---- Tier 2: classify new images. Skip the model when there is nothing to choose between (fast path).
   const fresh = s.images.filter((i) => !i.kind);
   let by: 'claude' | 'stub' | 'fast_path' = model.name;
+  // Heuristic prior = what the page is currently asking for (it switches to the receipt once the model is known).
+  const ask = currentAsk(s.goals, s.facts, s.ask);
   if (fresh.length) {
     const pendingTotal = s.images.filter((i) => !i.extracted).length;
-    if (pendingTotal <= 1) {
+    // Fast path only for the very first image, where latency matters most: tier 3 reads the kind itself.
+    // After that the cheap classifier always gates, so repeat shots of a solved item never reach tier 3.
+    if (pendingTotal <= 1 && s.extractions.length === 0 && s.tier3Calls === 0) {
       by = 'fast_path';
-      for (const img of fresh) Object.assign(img, stubClassify(img, s.ask), { rankedBy: 'fast_path' });
+      for (const img of fresh) Object.assign(img, stubClassify(img, ask), { rankedBy: 'fast_path' });
     } else {
       try {
         s.tier2Calls++;
-        const cls = await model.classify(fresh, s.ask);
+        const cls = await model.classify(fresh, ask);
         fresh.forEach((img, i) => Object.assign(img, cls[i], { rankedBy: model.name }));
       } catch (err) {
         by = 'stub';
         console.warn('[vision] tier-2 classify failed, using heuristics:', (err as Error).message);
-        for (const img of fresh) Object.assign(img, stubClassify(img, s.ask), { rankedBy: 'stub' });
+        for (const img of fresh) Object.assign(img, stubClassify(img, ask), { rankedBy: 'stub' });
       }
     }
     const order = rankImages(s.images.filter((i) => !i.extracted), s.goals, s.facts);

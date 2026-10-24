@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fixie operator console</title>
+<style>
+  :root{--sun:#FFD43B;--cream:#FFF4CC;--ink:#2b2400;--mute:#7a6a1c;--line:#f1dd8a;--ok:#2f9e44;--bad:#e03131;--warn:#f08c00;--blue:#1971c2}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--cream);color:var(--ink);font:18px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  header{background:var(--sun);padding:14px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;position:sticky;top:0;z-index:5;box-shadow:0 2px 0 rgba(0,0,0,.06)}
+  header h1{margin:0;font-size:28px;letter-spacing:-.5px}
+  header .sp{flex:1}
+  .chip{display:inline-block;padding:2px 12px;border-radius:999px;font-weight:700;font-size:15px;background:#fff;border:2px solid var(--line);white-space:nowrap}
+  .chip.sim{background:#e7f5ff;border-color:#a5d8ff;color:var(--blue)}
+  .chip.live{background:#ebfbee;border-color:#8ce99a;color:var(--ok)}
+  .chip.ringing{background:#fff3bf;border-color:var(--sun);color:#8a6d00}
+  .chip.ended{background:#f1f3f5;border-color:#dee2e6;color:#868e96}
+  .chip.bad{background:#fff5f5;border-color:#ffa8a8;color:var(--bad)}
+  .chip.warn{background:#fff9db;border-color:#ffd43b;color:#8a6d00}
+  main{padding:20px 24px 60px;display:grid;gap:20px;grid-template-columns:repeat(auto-fit,minmax(520px,1fr));max-width:1800px;margin:0 auto}
+  section{background:#fff;border-radius:20px;padding:18px 20px;box-shadow:0 4px 0 var(--line);min-width:0}
+  section.wide{grid-column:1/-1}
+  h2{margin:0 0 12px;font-size:22px;display:flex;align-items:center;gap:10px}
+  h2 small{font-weight:500;color:var(--mute);font-size:15px}
+  .card{background:var(--cream);border-radius:16px;padding:12px 14px;margin-bottom:12px}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .sp{flex:1}
+  .muted{color:var(--mute);font-size:15px}
+  .mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:14px}
+  button,select,input{font:inherit}
+  button{background:var(--sun);border:0;border-radius:12px;padding:6px 16px;font-weight:700;cursor:pointer;color:var(--ink);box-shadow:0 3px 0 #d9ae1c}
+  button:active{transform:translateY(2px);box-shadow:0 1px 0 #d9ae1c}
+  button.danger{background:#ffa8a8;box-shadow:0 3px 0 #e03131}
+  button.ghost{background:#fff;border:2px solid var(--line);box-shadow:none}
+  button:disabled{opacity:.5;cursor:default}
+  select,input[type=text]{border:2px solid var(--line);border-radius:10px;padding:4px 10px;background:#fff}
+  .tr{margin:6px 0 0;padding-left:10px;border-left:4px solid var(--sun);font-size:15px}
+  .tr b{color:var(--mute)}
+  table{border-collapse:collapse;width:100%;font-size:16px}
+  th,td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--mute);font-weight:600;font-size:14px}
+  tr.rej td{color:var(--bad)}
+  .best{background:#fff9db;border-radius:8px}
+  .bar{display:flex;align-items:center;gap:8px;margin:2px 0}
+  .bar .n{width:170px;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .bar .t{flex:1;height:12px;background:var(--cream);border-radius:99px;overflow:hidden}
+  .bar .f{height:100%;background:var(--sun);border-radius:99px}
+  .bar .v{width:48px;text-align:right;font-size:14px}
+  #events{height:380px;overflow:auto;background:#fffdf0;border-radius:12px;padding:8px 10px;border:2px solid var(--line)}
+  .ev{padding:2px 4px;border-radius:6px;font-size:14px;font-family:ui-monospace,Menlo,Consolas,monospace;word-break:break-word}
+  .ev.error{background:#ffe3e3;color:#a61e1e;font-weight:700}
+  .ev.guard{background:#fff3bf}
+  .ev .ty{display:inline-block;min-width:130px;font-weight:700}
+  pre.log{margin:0;max-height:340px;overflow:auto;background:#2b2400;color:#ffeb99;border-radius:12px;padding:10px 12px;font-size:13px;white-space:pre-wrap;word-break:break-word}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:700px){main{grid-template-columns:1fr}.grid2{grid-template-columns:1fr}}
+  #toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 20px;border-radius:12px;display:none;z-index:9}
+  details summary{cursor:pointer;color:var(--mute);font-size:15px}
+</style>
+</head>
+<body>
+<header>
+  <h1>&#9728;&#65039; Fixie operator console</h1>
+  <span id="hHealth" class="chip">...</span>
+  <span id="hDry" class="chip"></span>
+  <span class="sp"></span>
+  <span class="muted" id="hTime"></span>
+  <button class="danger" id="resetBtn">Reset demo</button>
+</header>
+<main>
+  <section class="wide"><h2>Live calls <small id="callsCount"></small></h2><div id="calls"></div></section>
+  <section class="wide"><h2>Jobs <small id="jobsCount"></small></h2><div id="jobs"></div></section>
+  <section class="wide">
+    <h2>Event stream <small id="evCount"></small></h2>
+    <div class="row" style="margin-bottom:8px">
+      <label>Job <select id="fJob"><option value="">all</option></select></label>
+      <label>Type <select id="fType"><option value="">all</option></select></label>
+      <label><input type="checkbox" id="fNoTr" checked> hide transcript</label>
+      <label><input type="checkbox" id="fErr"> errors and guards only</label>
+      <label><input type="checkbox" id="fFollow" checked> follow</label>
+      <span class="sp"></span>
+      <span class="chip" id="sseState">connecting</span>
+    </div>
+    <div id="events"></div>
+  </section>
+  <section><h2>System</h2><div id="system"></div></section>
+  <section><h2>Customer memory <small>data/customers.json</small></h2><div id="customers"></div></section>
+  <section class="wide"><h2>Server log <small>last 50 lines, redacted</small></h2><pre class="log" id="log"></pre></section>
+</main>
+<div id="toast"></div>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money = (n) => (typeof n === 'number' ? '$' + n.toFixed(2) : '-');
+let skew = 0; // server now minus client now
+let state = null;
+
+function toast(msg) { const t = $('toast'); t.textContent = msg; t.style.display = 'block'; clearTimeout(toast.h); toast.h = setTimeout(() => (t.style.display = 'none'), 3500); }
+async function post(url, label) {
+  try {
+    const r = await fetch(url, { method: 'POST', headers: { 'x-admin-ui': '1', 'content-type': 'application/json' }, body: '{}' });
+    const j = await r.json().catch(() => ({}));
+    toast(r.ok ? label + ': ok' : label + ': ' + (j.error || r.status));
+  } catch (e) { toast(label + ': ' + e.message); }
+  refresh();
+}
+const fmtDur = (s) => { s = Math.max(0, Math.round(s)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+
+function renderCalls(list) {
+  $('callsCount').textContent = list.filter((c) => c.state !== 'ended').length + ' active, ' + list.length + ' total';
+  if (!list.length) { $('calls').innerHTML = '<div class="muted">No calls yet.</div>'; return; }
+  $('calls').innerHTML = list.map((c) => {
+    const start = c.liveAt || c.createdAt;
+    const dur = c.state === 'ended'
+      ? '<span>' + (c.durationSec != null ? fmtDur(c.durationSec) : '-') + '</span>'
+      : '<span class="dur" data-start="' + start + '">' + fmtDur((Date.now() + skew - start) / 1000) + '</span>';
+    const tr = c.transcript.slice(-4).map((l) => '<div class="tr"><b>' + esc(l.speaker) + ':</b> ' + esc(l.text) + '</div>').join('');
+    return '<div class="card"><div class="row">'
+      + '<b>' + esc(c.party) + '</b><span class="chip">' + esc(c.lane) + '</span>'
+      + '<span class="chip ' + esc(c.state) + '">' + esc(c.state) + '</span>'
+      + '<span class="chip ' + esc(c.mode) + '">' + esc(c.mode) + '</span>'
+      + '<span class="mono">' + esc(c.phone) + '</span>'
+      + '<span>&#9201; ' + dur + ' <span class="muted">/ ' + c.maxSec + 's</span></span>'
+      + (c.jobId ? '<span class="muted">' + esc(c.jobId) + '</span>' : '<span class="muted">no job yet</span>')
+      + (c.endedReason ? '<span class="muted">' + esc(c.endedReason) + '</span>' : '')
+      + '<span class="sp"></span>'
+      + (c.state !== 'ended' ? '<button class="danger" data-end="' + esc(c.callId) + '">End call</button>' : '')
+      + '</div>' + tr + '<div class="muted mono" style="margin-top:4px">' + esc(c.callId) + '</div></div>';
+  }).join('');
+}
+
+function renderQuotes(j) {
+  if (!j.quotes.length) return '<div class="muted">No quotes yet.</div>';
+  const best = j.bestDeal;
+  return '<table><tr><th>Supplier</th><th>Price</th><th>Ship</th><th>Landed</th><th>Stock</th><th>ETA</th><th>Note</th></tr>'
+    + j.quotes.map((q) => {
+      const isBest = best && best.supplier === q.supplier && best.landedTotal === q.landedTotal;
+      return '<tr class="' + (q.rejectedReason ? 'rej' : isBest ? 'best' : '') + '"><td>' + esc(q.supplier) + (isBest ? ' &#9733;' : '') + '</td><td>' + money(q.price) + '</td><td>' + money(q.shipping)
+        + '</td><td><b>' + money(q.landedTotal) + '</b></td><td>' + (q.inStock ? 'yes' : 'no') + '</td><td>' + esc(q.eta || '-') + '</td><td>'
+        + (q.rejectedReason ? 'REJECTED: ' + esc(q.rejectedReason) : q.identicalPart ? 'identical' : 'not identical') + '</td></tr>';
+    }).join('') + '</table>'
+    + (best ? '<div style="margin-top:6px"><b>Best deal:</b> ' + esc(best.supplier) + ' at ' + money(best.landedTotal) + ' landed, ETA ' + esc(best.eta || '-') + '</div>' : '');
+}
+
+function renderDiag(d) {
+  if (!d) return '<div class="muted">No diagnosis yet.</div>';
+  const rows = Object.entries(d.posterior).sort((a, b) => b[1] - a[1]);
+  return '<div class="muted">' + esc(d.faultTree) + ', ' + Object.keys(d.observations).length + ' observed, ' + d.unknowns + ' unknown</div>'
+    + rows.map(([k, v]) => '<div class="bar"><span class="n" title="' + esc(k) + '">' + esc(k) + '</span><span class="t"><span class="f" style="display:block;width:' + Math.round(v * 100) + '%"></span></span><span class="v">' + Math.round(v * 100) + '%</span></div>').join('');
+}
+
+const stateCls = (s) => (['FIXED', 'DELIVERED', 'ORDERED'].includes(s) ? 'live' : ['STOPPED', 'ESCALATED', 'DECLINED'].includes(s) ? 'bad' : ['AWAITING_CONFIRMATION', 'SOURCING'].includes(s) ? 'warn' : '');
+const CLOSED = ['FIXED', 'DECLINED', 'STOPPED', 'ESCALATED', 'NOTIFIED'];
+
+function renderJobs(list) {
+  $('jobsCount').textContent = list.length + ' total';
+  if (!list.length) { $('jobs').innerHTML = '<div class="muted">No jobs yet. Run a sim intake.</div>'; return; }
+  $('jobs').innerHTML = list.map((j) => {
+    const w = j.warranty ? (j.warranty.covered ? 'covered' : 'not covered') + ': ' + esc(j.warranty.detail) : 'unknown';
+    const spendPct = Math.min(100, Math.round((j.agentCostUsd / (j.spendCap || 1)) * 100));
+    return '<div class="card"><div class="row"><b style="font-size:20px">' + esc(j.id) + '</b><span class="chip ' + stateCls(j.state) + '">' + esc(j.state) + '</span>'
+      + '<span>' + esc(j.appliance || j.fault?.asset || 'appliance ?') + (j.model ? ' <span class="muted">(' + esc(j.model) + ')</span>' : '') + '</span>'
+      + '<span class="muted">' + esc(j.customer.name) + ' ' + esc(j.customer.phone) + '</span><span class="sp"></span>'
+      + (j.state === 'ORDERED' ? '<button data-deliver="' + esc(j.id) + '">Simulate delivered</button>' : '')
+      + (!CLOSED.includes(j.state) ? '<button class="danger" data-stop="' + esc(j.id) + '">Stop job</button>' : '') + '</div>'
+      + '<div style="margin:6px 0"><b>Symptom:</b> ' + esc(j.symptom || j.fault?.code || '-') + ' &nbsp; <b>Part:</b> ' + (j.part ? esc(j.part.name) + ' <span class="mono">' + esc(j.part.partNumber) + '</span> <span class="chip ' + (j.part.safety === 'pro_required' ? 'bad' : '') + '">' + esc(j.part.safety) + '</span>' : '-')
+      + ' &nbsp; <b>Warranty:</b> ' + w + '</div>'
+      + '<div class="grid2"><div>' + renderQuotes(j) + '</div><div><b>Diagnosis</b>' + renderDiag(j.diagnosis) + '</div></div>'
+      + '<div style="margin-top:8px"><b>Guards fired:</b> ' + (j.guards.length ? j.guards.map((g) => '<span class="chip warn" title="' + esc(g.reason) + '">' + esc(g.kind) + ' &rarr; ' + esc(g.action) + '</span>').join(' ') : '<span class="muted">none</span>') + '</div>'
+      + (j.guards.length ? '<details><summary>guard reasons</summary>' + j.guards.map((g) => '<div class="muted">' + esc(g.kind) + ': ' + esc(g.reason) + '</div>').join('') + '</details>' : '')
+      + '<div class="row" style="margin-top:8px"><b>Agent spend:</b> ' + money(j.agentCostUsd) + ' of ' + money(j.spendCap)
+      + '<span class="bar" style="width:160px"><span class="t"><span class="f" style="display:block;width:' + spendPct + '%;background:' + (spendPct > 80 ? 'var(--bad)' : 'var(--sun)') + '"></span></span></span>'
+      + '<span class="muted">' + j.guardedCalls + ' guarded calls, ' + j.reservedMinutes.toFixed(1) + ' min reserved</span></div>'
+      + (j.notes.length ? '<details><summary>notes</summary>' + j.notes.map((n) => '<div class="muted">' + esc(n) + '</div>').join('') + '</details>' : '')
+      + '</div>';
+  }).join('');
+  syncJobFilter(list);
+}
+
+function renderSystem(s) {
+  const hp = $('hHealth'); hp.textContent = s.ok ? 'healthy' : 'down'; hp.className = 'chip ' + (s.ok ? 'live' : 'bad');
+  const d = $('hDry'); d.textContent = s.dryRun ? 'DRY RUN (all sim)' : 'LIVE phones'; d.className = 'chip ' + (s.dryRun ? 'sim' : 'warn');
+  $('system').innerHTML = '<table>'
+    + '<tr><th>Public URL</th><td class="mono">' + esc(s.publicUrl || '(unset)') + '</td></tr>'
+    + '<tr><th>Dry run</th><td>' + s.dryRun + '</td></tr>'
+    + '<tr><th>Process</th><td>pid ' + s.pid + ', port ' + s.port + ', up ' + fmtDur(s.uptimeSec) + '</td></tr>'
+    + '<tr><th>Lane modes</th><td>' + Object.entries(s.modes).map(([l, m]) => '<span class="chip ' + esc(m) + '">' + esc(l) + ': ' + esc(m) + '</span>').join(' ') + '</td></tr>'
+    + '<tr><th>Caps</th><td class="muted">' + Object.entries(s.caps).map(([k, v]) => esc(k) + '=' + esc(v)).join(', ') + ', spend=' + s.spendCap + '</td></tr></table>'
+    + '<h2 style="margin-top:14px;font-size:18px">Roster</h2>'
+    + (s.roster ? '<table><tr><th>Name</th><th>Lane</th><th>Phone</th><th>Mode</th></tr>' + s.roster.map((r) => '<tr><td>' + esc(r.name) + ' <span class="muted mono">' + esc(r.id) + '</span></td><td>' + esc(r.lane) + '</td><td class="mono">' + esc(r.phone) + '</td><td><span class="chip ' + esc(r.mode) + '">' + esc(r.mode) + '</span>' + (r.override ? ' <span class="muted">override</span>' : '') + '</td></tr>').join('') + '</table>' : '<div class="muted">Roster not loadable.</div>');
+  const log = $('log'); const atEnd = log.scrollTop + log.clientHeight >= log.scrollHeight - 20;
+  log.textContent = s.log.join('\n'); if (atEnd) log.scrollTop = log.scrollHeight;
+}
+
+function renderCustomers(c) {
+  if (!c.exists) { $('customers').innerHTML = '<div class="muted">No customers.json yet.</div>'; return; }
+  const d = c.data;
+  const entries = Array.isArray(d) ? d.map((v, i) => [String(i + 1), v]) : d && typeof d === 'object' ? Object.entries(d) : [['value', d]];
+  $('customers').innerHTML = entries.length ? entries.map(([k, v]) => '<div class="card"><b class="mono">' + esc(k) + '</b><pre class="mono" style="margin:4px 0 0;white-space:pre-wrap">' + esc(typeof v === 'string' ? v : JSON.stringify(v, null, 2)) + '</pre></div>').join('') : '<div class="muted">Empty.</div>';
+}
+
+async function refresh() {
+  try {
+    const r = await fetch('/admin/api/state', { cache: 'no-store' });
+    if (!r.ok) throw new Error(r.status);
+    state = await r.json();
+    skew = state.now - Date.now();
+    renderCalls(state.calls); renderJobs(state.jobs); renderSystem(state.system); renderCustomers(state.customers);
+  } catch (e) { const hp = $('hHealth'); hp.textContent = 'unreachable'; hp.className = 'chip bad'; }
+}
+
+// ---- event stream ----
+const events = []; const types = new Set(); const jobIds = new Set();
+function evMatches(e) {
+  if ($('fJob').value && e.jobId !== $('fJob').value) return false;
+  if ($('fType').value && e.type !== $('fType').value) return false;
+  if ($('fNoTr').checked && e.type === 'transcript' && $('fType').value !== 'transcript') return false;
+  if ($('fErr').checked && !(e.type === 'error' || e.type === 'guard')) return false;
+  return true;
+}
+function evHtml(e) {
+  const t = new Date(e.ts).toLocaleTimeString();
+  const cls = e.type === 'error' ? 'error' : e.type === 'guard' ? 'guard' : '';
+  return '<div class="ev ' + cls + '">' + esc(t) + ' <span class="ty">' + esc(e.type) + '</span> <span class="muted">' + esc(e.jobId || '-') + (e.simulated ? ' SIM' : '') + '</span> ' + esc(JSON.stringify(e.data)) + '</div>';
+}
+function renderEvents() {
+  const box = $('events'); const shown = events.filter(evMatches).slice(-300);
+  $('evCount').textContent = shown.length + ' shown / ' + events.length + ' buffered';
+  box.innerHTML = shown.map(evHtml).join('');
+  if ($('fFollow').checked) box.scrollTop = box.scrollHeight;
+}
+function addOpt(sel, v) { const o = document.createElement('option'); o.value = v; o.textContent = v; sel.appendChild(o); }
+function syncJobFilter(list) { for (const j of list) if (!jobIds.has(j.id)) { jobIds.add(j.id); addOpt($('fJob'), j.id); } }
+let evTimer = null;
+function onEv(m) {
+  const e = JSON.parse(m.data);
+  events.push(e); if (events.length > 1500) events.shift();
+  if (!types.has(e.type)) { types.add(e.type); addOpt($('fType'), e.type); }
+  if (e.jobId && !jobIds.has(e.jobId)) { jobIds.add(e.jobId); addOpt($('fJob'), e.jobId); }
+  if (!evTimer) evTimer = setTimeout(() => { evTimer = null; renderEvents(); }, 250);
+  if (['call_started', 'call_ended', 'job_state', 'quote', 'guard', 'best_deal', 'warranty'].includes(e.type)) { clearTimeout(refresh.t); refresh.t = setTimeout(refresh, 150); }
+}
+function connect() {
+  const es = new EventSource('/events');
+  es.addEventListener('fixie', onEv);
+  es.addEventListener('reset', () => { events.length = 0; renderEvents(); refresh(); });
+  es.onopen = () => { $('sseState').textContent = 'live'; $('sseState').className = 'chip live'; };
+  es.onerror = () => { $('sseState').textContent = 'reconnecting'; $('sseState').className = 'chip bad'; };
+}
+for (const id of ['fJob', 'fType', 'fNoTr', 'fErr']) $(id).addEventListener('change', renderEvents);
+
+// ---- actions ----
+document.addEventListener('click', (ev) => {
+  const b = ev.target.closest('button'); if (!b) return;
+  if (b.dataset.end) post('/admin/api/calls/' + encodeURIComponent(b.dataset.end) + '/end', 'End call');
+  else if (b.dataset.stop) { if (confirm('Stop ' + b.dataset.stop + ' and end its live calls?')) post('/admin/api/jobs/' + encodeURIComponent(b.dataset.stop) + '/stop', 'Stop job'); }
+  else if (b.dataset.deliver) post('/admin/api/jobs/' + encodeURIComponent(b.dataset.deliver) + '/delivered', 'Simulate delivered');
+});
+$('resetBtn').addEventListener('click', () => { if (confirm('Reset the demo? This wipes all jobs, calls and events and ends live calls.')) post('/admin/api/reset', 'Reset demo'); });
+
+setInterval(() => {
+  $('hTime').textContent = new Date().toLocaleTimeString();
+  for (const el of document.querySelectorAll('.dur')) el.textContent = fmtDur((Date.now() + skew - Number(el.dataset.start)) / 1000);
+}, 1000);
+setInterval(refresh, 3000);
+refresh(); connect();
+</script>
+</body>
+</html>

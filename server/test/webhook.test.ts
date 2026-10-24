@@ -82,14 +82,14 @@ test('tool-calls: inbound start_job registers user ctx, parses string args, repl
     assert.equal(again.body.results[0].result, 'ok:start_job');
     assert.equal(h.toolRuns(), runs);
 
-    // Errors → "Sorry, one moment."
+    // Errors → "Saved. Keep the conversation going."
     const err = await h.post({
       type: 'tool-calls',
       call: inboundCall,
       toolCallList: [{ id: 'call_x', function: { name: 'report_fix', arguments: { ok: true } } }],
     });
     assert.equal(err.status, 200);
-    assert.equal(err.body.results[0].result, 'Sorry, one moment.');
+    assert.equal(err.body.results[0].result, 'Saved. Keep the conversation going.');
   } finally {
     h.close();
   }
@@ -229,27 +229,65 @@ test('buildAssistant matches the SPEC §6 shape', () => {
   const fn = a.model.tools.find((t: any) => t.type === 'function');
   assert.equal(fn.function.name, 'record_quote');
   assert.deepEqual(fn.server.url, a.server.url);
-  assert.ok(a.model.tools.some((t: any) => t.type === 'endCall'));
+  // Supplier can't hang up on its own: only our end_call, which refuses until a quote is recorded.
+  assert.ok(a.model.tools.some((t: any) => t.function?.name === 'end_call'));
+  assert.ok(!a.model.tools.some((t: any) => t.type === 'endCall'));
+  assert.match(a.model.messages[0].content, /Never call end_call before record_quote/);
 
   const cb = buildAssistant({ lane: 'user', job, attempt: 1 }) as any;
+  assert.ok(cb.model.tools.some((t: any) => t.type === 'endCall'));
   assert.equal(cb.model.model, config.vapi.model);
   assert.match(cb.firstMessage, /the AI assistant you called at .+ about your dryer/);
+  const priced = buildAssistant({
+    lane: 'user',
+    job: { ...job, bestDeal: { supplier: 'PartsDirect', price: 15, shipping: 0, landedTotal: 15, inStock: true, eta: 'Tuesday' } as any },
+    attempt: 1,
+  }) as any;
+  assert.match(priced.firstMessage, /\$15\.00 total with shipping, arriving Tuesday\. Want me to order it\?$/);
 
   const d = buildAssistant({ lane: 'delivery', job, attempt: 1 }) as any;
   assert.deepEqual(
     d.model.tools.filter((t: any) => t.type === 'function').map((t: any) => t.function.name),
-    ['safety_ack', 'install_progress', 'report_fix'],
+    ['safety_ack', 'install_progress', 'report_fix', 'record_knowledge'],
   );
 
   const intake = buildIntakeAssistant() as any;
-  assert.equal(intake.model.tools[0].function.name, 'start_job');
-  assert.equal(intake.model.tools[0].function.parameters.properties.phone, undefined);
+  assert.equal(intake.model.tools[0].function.name, 'lookup_caller');
+  const sj = intake.model.tools.find((t: any) => t.function?.name === 'start_job').function;
+  assert.equal(sj.parameters.properties.phone, undefined);
   const toolNames = intake.model.tools.map((t: any) => t.function?.name).filter(Boolean);
   assert.ok(toolNames.includes('record_test') && toolNames.includes('safety_ack'));
   const rt = intake.model.tools.find((t: any) => t.function?.name === 'record_test').function;
   assert.deepEqual(rt.parameters.required, ['test', 'reading']);
   assert.match(intake.model.messages[0].content, /record_test/);
   assert.match(intake.firstMessage, /AI assistant\. This call is recorded/);
+  assert.ok(toolNames.includes('lookup_caller'));
+  const lc = intake.model.tools.find((t: any) => t.function?.name === 'lookup_caller').function;
+  assert.deepEqual(lc.parameters.properties, {});
+  assert.match(intake.model.messages[0].content, /lookup_caller/);
+  assert.match(intake.model.messages[0].content, /has_meter/);
+  assert.match(intake.model.messages[0].content, /No problem, we'll skip that/);
+  assert.match(intake.model.messages[0].content, /sound wave/);
+  assert.match(intake.model.messages[0].content, /small white oval piece behind the back panel/);
+});
+
+test('tool-calls: lookup_caller passes through with empty args and caller id', async () => {
+  const h = harness();
+  try {
+    const r = await h.post({
+      type: 'tool-calls',
+      call: inboundCall,
+      toolCallList: [{ id: 'call_lc', type: 'function', function: { name: 'lookup_caller', arguments: '{}' } }],
+    });
+    assert.deepEqual(r.body, { results: [{ name: 'lookup_caller', toolCallId: 'call_lc', result: 'ok:lookup_caller' }] });
+    const ev = h.seen[0] as Extract<CallEvent, { kind: 'tool' }>;
+    assert.equal(ev.name, 'lookup_caller');
+    assert.deepEqual(ev.args, {});
+    assert.equal(ev.fromNumber, '+16195550100');
+    assert.equal(ev.callType, 'inbound');
+  } finally {
+    h.close();
+  }
 });
 
 test('tool-calls: flat {id,name,parameters} shape and toolWithToolCallList merge', async () => {

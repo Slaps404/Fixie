@@ -134,6 +134,21 @@ test('pipeline: a single image takes the fast path (no tier-2 call)', async () =
   assert.equal(s.status, 'done');
 });
 
+test('pipeline: after the model is solved, the next single shot goes through tier 2 with the receipt prior', async () => {
+  const s = store.create({ jobId: null, ask: 'nameplate', goals: ['model', 'purchaseDate'] });
+  ingest(s, { source: 'camera', mime: 'image/jpeg', data: JPEG, tier1: { score: 0.8, text: 0.7 } });
+  await run(s);
+  assert.equal(s.facts.model?.value, 'WED4815EW');
+  ingest(s, { source: 'camera', mime: 'image/jpeg', data: JPEG, tier1: { score: 0.8, text: 0.7 } });
+  await run(s);
+  const ranks = events.filter((e) => e.type === 'vision_rank');
+  assert.deepEqual(ranks.map((e) => e.data.by), ['fast_path', 'stub']);
+  assert.equal(ranks[1].data.order[0].kind, 'receipt');
+  assert.equal(s.tier2Calls, 1);
+  assert.equal(s.status, 'done');
+  assert.equal(s.facts.purchaseDate?.value, '2019-06-14');
+});
+
 test('pipeline: a model that throws is counted as a failure, never crashes the run', async () => {
   setVisionModel({ ...stubModel, async extract() { throw new Error('API down'); } });
   try {

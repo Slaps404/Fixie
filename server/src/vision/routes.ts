@@ -9,7 +9,7 @@ import { maskPhone } from '../events.ts';
 import { vemit as emit } from './emit.ts';
 import { jobs } from '../jobs.ts';
 import { lookUrl, startVisualSession } from './api.ts';
-import { CONFIDENT, openGoals } from './policy.ts';
+import { CONFIDENT, GOAL_ASK, openGoals } from './policy.ts';
 import { ingest, sessionEvent, spokenSummary, vemit, visualStatus } from './pipeline.ts';
 import { store } from './store.ts';
 import { downloadMedia, validTwilioSignature, twilioConfigured } from './twilio.ts';
@@ -20,7 +20,7 @@ const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 const ASKS: Ask[] = ['nameplate', 'receipt', 'part'];
 const PROMPTS: Record<Ask, { prompt: string; icon: string }> = {
   nameplate: { prompt: 'Point at the sticker inside the door', icon: '🏷️' },
-  receipt: { prompt: 'Point at the receipt', icon: '🧾' },
+  receipt: { prompt: 'Got a receipt? Point at it', icon: '🧾' },
   part: { prompt: 'Point at the numbers on the part', icon: '🔢' },
 };
 
@@ -83,6 +83,10 @@ function headline(s: VisionSession): string {
 export function resultView(s: VisionSession) {
   const extracted = s.images.filter((i) => i.extracted).length;
   const open = openGoals(s.goals, s.facts);
+  // The first goal is the primary one (the nameplate unlocks the parts lookup); later goals are nice-to-have.
+  const primaryDone = s.goals.length > 0 && !open.includes(s.goals[0]);
+  const triedButUnsure = open.some((g) => s.facts[g] && s.facts[g]!.confidence < CONFIDENT) || extracted > s.extractions.length;
+  const nextAsk: Ask | null = open[0] ? GOAL_ASK[open[0]] : null;
   return {
     code: s.code,
     jobId: s.jobId,
@@ -93,7 +97,9 @@ export function resultView(s: VisionSession) {
     missing: open,
     headline: headline(s),
     spoken: spokenSummary(s),
-    hint: s.status === 'waiting' && extracted > 0 && open.length ? 'Closer, and hold still' : null,
+    primaryDone,
+    next: primaryDone && nextAsk ? PROMPTS[nextAsk] : null,
+    hint: s.status === 'waiting' && triedButUnsure ? 'Closer, and hold still' : null,
     facts: Object.fromEntries(Object.entries(s.facts).map(([k, v]) => [k, typeof v === 'object' && v ? { value: v.value, confidence: v.confidence } : v])),
     images: s.images.length,
     tier2Calls: s.tier2Calls,

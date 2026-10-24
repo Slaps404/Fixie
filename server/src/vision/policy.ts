@@ -1,6 +1,6 @@
 // Pure decision logic for the vision pipeline: tier-2 priority ranking and the tier-3 early-stop policy.
 // No I/O here, so it is unit-tested directly (test/vision.test.ts).
-import type { Facts, Goal, ImageKind, VisionImage } from './types.ts';
+import type { Ask, Facts, Goal, ImageKind, VisionImage } from './types.ts';
 
 /** A goal counts as known once its confidence reaches this. */
 export const CONFIDENT = Number(process.env.VISION_CONFIDENT) || 0.85;
@@ -29,6 +29,15 @@ export const KIND_WEIGHT: Record<ImageKind, number> = {
   appliance: 0.25,
   other: 0.05,
 };
+
+/** What the camera page asks for next, per goal. */
+export const GOAL_ASK: Record<Goal, Ask> = { model: 'nameplate', purchaseDate: 'receipt', partNumber: 'part' };
+
+/** The thing the caller is being asked to show right now: the first open goal, else the original ask. */
+export function currentAsk(goals: Goal[], facts: Facts, fallback: Ask): Ask {
+  const open = openGoals(goals, facts);
+  return open[0] ? GOAL_ASK[open[0]] : fallback;
+}
 
 export function openGoals(goals: Goal[], facts: Facts): Goal[] {
   return goals.filter((g) => (facts[g]?.confidence ?? 0) < CONFIDENT);
@@ -95,7 +104,7 @@ export function nextStep(
   const open = openGoals(goals, facts);
   const pending = ranked.filter((r) => !images.find((i) => i.id === r.imageId)?.extracted);
   if (!open.length) {
-    return { action: 'stop', code: 'goals_met', reason: `Early stop: ${goals.map(goalLabel).join(' + ')} confident (≥${CONFIDENT}). Skipped ${pending.length} image(s), saving ${pending.length} expensive call(s).` };
+    return { action: 'stop', code: 'goals_met', reason: `Early stop: ${goals.map(goalLabel).join(' + ')} confident (≥${CONFIDENT}).${pending.length ? ` Skipped ${pending.length} image(s), saving ${pending.length} expensive call(s).` : ''}` };
   }
   if (tier3Calls >= budget) {
     return { action: 'stop', code: 'budget', reason: `Tier-3 budget spent (${tier3Calls}/${budget} calls). Still missing: ${open.map(goalLabel).join(', ')}.` };

@@ -10,6 +10,13 @@ mkdirSync(DATA_DIR, { recursive: true });
 let nextId = 1;
 const history: FixieEvent[] = [];
 const clients = new Set<Response>();
+const listeners = new Set<(ev: FixieEvent) => void>();
+
+/** Subscribe to every emitted event (e.g. notifications). Listener errors never break emit(). Returns an unsubscribe fn. */
+export function onEvent(listener: (ev: FixieEvent) => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
 
 /** Mask a phone number to its last 4 digits. Events must never carry full numbers. */
 export function maskPhone(phone: string | undefined): string {
@@ -34,6 +41,13 @@ export function emit(
   }
   const frame = `id: ${ev.id}\nevent: fixie\ndata: ${JSON.stringify(ev)}\n\n`;
   for (const res of clients) res.write(frame);
+  for (const fn of listeners) {
+    try {
+      fn(ev);
+    } catch (err) {
+      console.warn('[events] listener failed:', (err as Error).message);
+    }
+  }
   if (type !== 'transcript') console.log(`[event] ${type}`, jobId ?? '', JSON.stringify(data));
   return ev;
 }

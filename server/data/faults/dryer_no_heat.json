@@ -4,17 +4,17 @@
   "symptom": "no heat",
   "note": "Likelihoods are expert-written, not learned. Every confirmed fix tunes them later.",
   "hypotheses": [
-    { "id": "thermal_fuse", "name": "Thermal fuse", "short": "fuse", "prior": 0.45, "partNumber": "WP3392519" },
-    { "id": "heating_element", "name": "Heating element", "short": "element", "prior": 0.25 },
-    { "id": "thermostat", "name": "High-limit / cycling thermostat", "short": "thermostat", "prior": 0.15 },
-    { "id": "timer_control", "name": "Timer / control", "short": "timer", "prior": 0.10 },
-    { "id": "power_one_leg", "name": "Power (breaker, one 240V leg)", "short": "power", "prior": 0.05 }
+    { "id": "thermal_fuse", "name": "Thermal fuse", "short": "fuse", "prior": 0.45, "partNumber": "WP3392519", "fix": "a cheap thermal fuse, about ten dollars, that most people can swap in twenty minutes; a clogged vent usually blew it, so we clean that too" },
+    { "id": "heating_element", "name": "Heating element", "short": "element", "prior": 0.25, "fix": "a new heating element, a bigger part but still doable at home" },
+    { "id": "thermostat", "name": "High-limit / cycling thermostat", "short": "thermostat", "prior": 0.15, "fix": "a small thermostat part, usually an easy swap" },
+    { "id": "timer_control", "name": "Timer / control", "short": "timer", "prior": 0.10, "fix": "a timer or control board, best checked by a pro" },
+    { "id": "power_one_leg", "name": "Power (breaker, one 240V leg)", "short": "power", "prior": 0.05, "fix": "resetting the dryer's breaker, which may fix it for free" }
   ],
   "tests": [
     {
       "id": "breaker_check",
       "label": "Breaker",
-      "prompt": "First, go to your breaker box. Dryers use two breakers side by side. Are both of them switched on, or is one tripped?",
+      "prompt": "A half-tripped breaker can cut the heat while the drum still turns, and resetting it is free. Your breaker box is usually a gray metal door in the garage, basement, or a hallway closet. Find the switch labeled dryer, push it fully off, then back on. Does it heat now?",
       "outcomes": ["ok", "tripped"],
       "likelihood": {
         "ok": { "thermal_fuse": 0.98, "heating_element": 0.98, "thermostat": 0.98, "timer_control": 0.98, "power_one_leg": 0.15 },
@@ -22,12 +22,13 @@
       },
       "safetyCost": 0,
       "requiresAck": [],
-      "needsMeter": false
+      "needsMeter": false,
+      "concept": "breaker_box"
     },
     {
       "id": "drum_spins",
       "label": "Drum",
-      "prompt": "Start the dryer. Does the drum turn and tumble normally?",
+      "prompt": "Start the dryer. Does the drum turn and does the light come on?",
       "outcomes": ["yes", "no"],
       "likelihood": {
         "yes": { "thermal_fuse": 0.85, "heating_element": 0.97, "thermostat": 0.97, "timer_control": 0.70, "power_one_leg": 0.95 },
@@ -40,7 +41,7 @@
     {
       "id": "any_warmth",
       "label": "Warmth",
-      "prompt": "Run it for about five minutes, then put your hand near the vent or inside the door. Is there any warmth at all, or is it completely cold?",
+      "prompt": "Think about the last time you ran it: when you opened the door, was there any warmth at all, or was it completely cold?",
       "outcomes": ["some", "none"],
       "likelihood": {
         "some": { "thermal_fuse": 0.03, "heating_element": 0.10, "thermostat": 0.50, "timer_control": 0.12, "power_one_leg": 0.10 },
@@ -53,7 +54,7 @@
     {
       "id": "fuse_continuity",
       "label": "Fuse",
-      "prompt": "Make sure the dryer is unplugged. Touch your meter probes to the two metal tabs on the little white fuse, set to beep. Does it beep, or stay silent?",
+      "prompt": "Your meter has a dial and two wires, one red, one black. Turn the dial to the picture that looks like a little sound wave or speaker. Touch the two metal tips together. Do you hear a beep? Good, that means it works. Now, with the dryer unplugged, the fuse is a small white oval piece behind the back panel. Touch one tip to each little metal tab on it. Beep or no beep?",
       "outcomes": ["open", "closed"],
       "likelihood": {
         "open": { "thermal_fuse": 0.95, "heating_element": 0.02, "thermostat": 0.02, "timer_control": 0.02, "power_one_leg": 0.02 },
@@ -61,12 +62,13 @@
       },
       "safetyCost": 1,
       "requiresAck": ["unplugged"],
-      "needsMeter": true
+      "needsMeter": true,
+      "concept": "multimeter"
     },
     {
       "id": "element_continuity",
       "label": "Element",
-      "prompt": "With the dryer still unplugged, touch the probes to the two terminals on the heating coil. Set to ohms, a good coil reads around ten. Is it about ten, or does it read open?",
+      "prompt": "With the dryer still unplugged and the meter on the little sound wave picture, touch one tip to each end of the long metal heating coil, the two metal screws where the wires attach. Beep or no beep?",
       "outcomes": ["open", "ok"],
       "likelihood": {
         "open": { "thermal_fuse": 0.03, "heating_element": 0.92, "thermostat": 0.02, "timer_control": 0.02, "power_one_leg": 0.02 },
@@ -74,12 +76,13 @@
       },
       "safetyCost": 1,
       "requiresAck": ["unplugged"],
-      "needsMeter": true
+      "needsMeter": true,
+      "concept": "multimeter"
     },
     {
       "id": "thermostat_continuity",
       "label": "Thermostat",
-      "prompt": "Still unplugged: touch the probes to the two terminals on the thermostat, the small round disc by the heater. Does it beep, or stay silent?",
+      "prompt": "Still unplugged, with the dial on the little sound wave picture: the thermostat is a small round metal disc near the heater, with two metal tabs. Touch one tip to each tab. Beep or no beep?",
       "outcomes": ["open", "closed"],
       "likelihood": {
         "open": { "thermal_fuse": 0.03, "heating_element": 0.03, "thermostat": 0.85, "timer_control": 0.02, "power_one_leg": 0.02 },
@@ -87,7 +90,8 @@
       },
       "safetyCost": 1,
       "requiresAck": ["unplugged"],
-      "needsMeter": true
+      "needsMeter": true,
+      "concept": "multimeter"
     }
   ]
 }

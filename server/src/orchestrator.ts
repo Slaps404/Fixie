@@ -8,10 +8,11 @@ import { emit, maskPhone, resetEvents } from './events.ts';
 import { calls } from './calls.ts';
 import { guards } from './guards.ts';
 import { jobs } from './jobs.ts';
-import { parts } from './parts.ts';
+import { partByNumber, parts } from './parts.ts';
 import { dialer, endCallCtx, partyName, safeRoster, simFlag } from './dialer.ts';
 import { initialState, isConfident, loadFaultTree, nextTest, observe, reasonFor, topHypothesis, UNKNOWN } from './diagnosis.ts';
 import type { DiagnosisState, FaultTest, FaultTree } from './diagnosis.ts';
+import { getProfile, isConcept, knownFacts, knowsConcept, normalizePhone, rememberAppliance, rememberJob, rememberKnowledge, summarize, updateProfile } from './memory.ts';
 
 const TERMINAL: JobState[] = ['FIXED', 'DECLINED', 'ESCALATED', 'STOPPED', 'NOTIFIED'];
 const NON_TERMINAL: JobState[] = ['NEW', 'DIAGNOSED', 'SOURCING', 'AWAITING_CONFIRMATION', 'ORDERED', 'DELIVERED', 'INSTALLING'];
@@ -35,11 +36,31 @@ const voicemailsSkipped = new Map<string, number>(); // jobId -> sourcing/other 
 interface DiagEntry {
   state: DiagnosisState;
   hasMeter: boolean;
+  /** Caller said (now or on an earlier call) they have no multimeter: meter tests are never offered. */
+  noMeter: boolean;
+  /** Caller number for customer memory (from caller ID only). */
+  phone: string;
   escalated: boolean;
   escalationAnnounced: boolean;
+  /** Safety acks given during intake, before any job exists (replayed onto the job at start_job). */
+  acks: string[];
+  /** True once start_job attached this diagnosis to a job. */
+  attached: boolean;
+  droppedNoted: boolean;
+  /** Top hypothesis id last spoken as "Best guess so far" on this call; unchanged guesses are not repeated. */
+  lastToldTop?: string;
 }
+/** A hypothesis whose posterior is below this is never sourced from the symptom lookup (#11). */
+const LOOKUP_FLOOR = 0.2;
 const diagByCall = new Map<string, DiagEntry>();
 const DIAG_TREE = 'dryer_no_heat';
+/** Jobs inherited from a previous process that resumeAfterRestart already picked up. */
+const resumed = new Set<string>();
+const PROCESS_START = Date.now();
+/** A callback placed less than this long ago may still be live after a restart: wait for it instead of redialing. */
+const CALLBACK_INFLIGHT_MS = 90_000;
+/** Job states mirrored into the caller's memory profile. */
+const REMEMBERED_STATES: JobState[] = ['ORDERED', 'FIXED', 'ESCALATED', 'DECLINED'];
 const bump = (m: Map<string, number>, jobId: string) => m.set(jobId, (m.get(jobId) ?? 0) + 1);
 
 function addTimer(jobId: string, t: NodeJS.Timeout) {
@@ -70,6 +91,7 @@ function move(jobId: string, from: JobState | JobState[], to: JobState, reason: 
   });
   emit(jobId, 'job_state', { from: prev, to, approvedBy, reason });
   if (TERMINAL.includes(to)) clearTimers(jobId);
+  if (REMEMBERED_STATES.includes(to)) rememberJobState(jobId);
   return true;
 }
 function note(job: Job, text: string, sim = false) {
@@ -130,6 +152,99 @@ function emitMetrics(job: Job, ctx?: Pick<CallCtx, 'mode'> | null) {
   }, ctx);
 }
 
+// ---------- customer memory ----------
+/** Caller number for memory: caller ID on the event, else the inbound call's registered number. Never tool args. */
+function callerPhone(e: Extract<CallEvent, { kind: 'tool' }>): string {
+  return e.fromNumber || calls.get(e.callId)?.to || '';
+}
+const issueOf = (job: Job) => {
+  const name = job.part?.name.replace(/\s*\(.*?\)\s*/g, ' ').trim();
+  if (name) return name.charAt(0).toLowerCase() + name.slice(1);
+  return job.symptom || job.appliance || 'repair';
+};
+
+function handleLookupCaller(e: Extract<CallEvent, { kind: 'tool' }>): string {
+  const phone = callerPhone(e);
+  const profile = phone ? getProfile(phone) : undefined;
+  const out = summarize(profile);
+  const known = knownFacts(profile);
+  if (profile?.name) known.unshift(`name: ${profile.name}`);
+  for (const a of profile?.appliances ?? []) known.push(`appliance: ${a.appliance} ${a.model}${a.purchaseYear ? ` (${a.purchaseYear})` : ''}`.trim());
+  const returning = out !== 'New caller.';
+  const ctx = calls.get(e.callId) ?? (e.callId.startsWith('sim') ? { mode: 'sim' as const } : null);
+  emit(null, 'note', {
+    kind: 'memory_lookup',
+    callId: e.callId,
+    phone: maskPhone(phone),
+    returning,
+    known,
+    text: returning ? `Caller ${maskPhone(phone)} is a returning customer${profile?.name ? ` (${profile.name})` : ''}: ${known.join('; ') || 'no facts yet'}.` : `Caller ${maskPhone(phone) || '(no caller ID)'} is new: nothing on file.`,
+  }, { simulated: ctx?.mode === 'sim' });
+  return out;
+}
+
+function handleRecordKnowledge(e: Extract<CallEvent, { kind: 'tool' }>): string {
+  const concept = e.args.concept;
+  if (!isConcept(concept)) return 'Noted.';
+  const knows = bool(e.args.knows, false);
+  const phone = callerPhone(e);
+  if (phone) updateProfile(phone, (p) => rememberKnowledge(p, concept, knows));
+  const ctx = calls.get(e.callId) ?? (e.callId.startsWith('sim') ? { mode: 'sim' as const } : null);
+  const word = concept.replace(/_/g, ' ');
+  emit(null, 'note', {
+    kind: 'memory_update',
+    field: `knows.${concept}`,
+    value: knows,
+    callId: e.callId,
+    text: knows ? `Caller knows what a ${word} is (remembered).` : `Caller does not know what a ${word} is (remembered; plain words from now on).`,
+  }, { simulated: ctx?.mode === 'sim' });
+  return 'Noted.';
+}
+
+/** After start_job: upsert the caller's name, appliance and a job entry. Idempotent per jobId. */
+function rememberStartJob(e: Extract<CallEvent, { kind: 'tool' }>): void {
+  const jobId = calls.get(e.callId)?.jobId;
+  const job = jobId ? jobs.get(jobId) : undefined;
+  if (!job || job.kind !== 'consumer') return;
+  const name = str(e.args.callerName);
+  updateProfile(callerPhone(e) || job.customer.phone, (p) => {
+    if (name) p.name = name;
+    if (job.model) rememberAppliance(p, { appliance: job.appliance ?? str(e.args.appliance), model: job.model, purchaseYear: job.purchaseYear });
+    rememberJob(p, { jobId: job.id, issue: issueOf(job), state: job.state });
+  });
+}
+
+function rememberJobState(jobId: string): void {
+  const job = jobs.get(jobId);
+  if (!job || job.kind !== 'consumer' || !getProfile(job.customer.phone)?.jobs.some((j) => j.jobId === jobId)) return;
+  updateProfile(job.customer.phone, (p) => rememberJob(p, { jobId, issue: issueOf(job), state: job.state }));
+}
+
+/** has_meter answers: only a clear yes counts as owning one; "no", "unknown", "what's that?" all mean no. */
+const meterYes = (reading: string) => /^(y|yes|yeah|yep|true|have|has|has one|owns?)\b/i.test(reading.trim());
+
+function rememberMeter(entry: DiagEntry, hasMeter: boolean): void {
+  entry.hasMeter = hasMeter;
+  entry.noMeter = !hasMeter;
+  if (entry.phone && getProfile(entry.phone)?.hasMeter !== hasMeter) updateProfile(entry.phone, (p) => (p.hasMeter = hasMeter));
+}
+
+function newDiagEntry(e: Extract<CallEvent, { kind: 'tool' }>, job: Job | undefined, tree: FaultTree): DiagEntry {
+  const phone = callerPhone(e) || job?.customer.phone || '';
+  const known = phone ? getProfile(phone)?.hasMeter : undefined;
+  return {
+    state: job?.diagnosis ? { ...job.diagnosis } : initialState(tree),
+    hasMeter: known === true,
+    noMeter: known === false,
+    phone: normalizePhone(phone),
+    escalated: false,
+    escalationAnnounced: false,
+    acks: [...(job?.safetyAcks ?? [])],
+    attached: !!job,
+    droppedNoted: false,
+  };
+}
+
 // ---------- intake ----------
 function ensureInboundCtx(callId: string, fromNumber: string | undefined, jobId: string | null): CallCtx {
   const existing = calls.get(callId);
@@ -177,6 +292,13 @@ function handleStartJob(e: Extract<CallEvent, { kind: 'tool' }>): string {
   const symptom = str(a.symptom);
   const purchaseYear = Number(a.purchaseYear) || undefined;
 
+  // The voice model sometimes fires start_job with no arguments, then retries with them. Answering that first call
+  // with a cached escalation dead-ended real calls, so with nothing to go on, create nothing and ask for a retry.
+  const hasEvidence = Object.keys(diagByCall.get(e.callId)?.state.observations ?? {}).length > 0;
+  if (!model && !getProfile(phone)?.appliances?.at(-1)?.model && !hasEvidence) {
+    return 'Missing the model number. If you have it, call start_job again with appliance, model, and symptom; otherwise ask them for it first.';
+  }
+
   let job = phone ? jobs.byCaller(phone) : undefined;
   if (job && !['NEW', 'DIAGNOSED'].includes(job.state)) {
     // Caller already has a job in flight: resume it, don't start a second one.
@@ -209,7 +331,12 @@ function handleStartJob(e: Extract<CallEvent, { kind: 'tool' }>): string {
   }
   const jobId = job.id;
   const diag = diagByCall.get(e.callId);
-  if (diag) mirrorDiagnosis(jobId, diag.state);
+  if (diag) {
+    diag.attached = true;
+    mirrorDiagnosis(jobId, diag.state);
+    const fresh = diag.acks.filter((k) => !(jobs.get(jobId)?.safetyAcks ?? []).includes(k));
+    if (fresh.length) jobs.update(jobId, (j) => j.safetyAcks.push(...fresh));
+  }
   const ctx = ensureInboundCtx(e.callId, phone, jobId);
   if (!job.calls.some((c) => c.callId === e.callId)) {
     jobs.update(jobId, (j) => j.calls.push({ callId: e.callId, lane: 'user', to: phone ?? '', startedAt: ctx.createdAt }));
@@ -218,6 +345,7 @@ function handleStartJob(e: Extract<CallEvent, { kind: 'tool' }>): string {
   if (usedFallback) note(job, 'No caller ID on the intake call; using the roster user number (demo only).', simFlag(job, sim));
 
   ev(job, 'consent', { callback: consentCallback, callId: e.callId }, sim);
+  for (const kind of diag?.acks ?? []) ev(job, 'safety_ack', { kind, callId: e.callId, phase: 'intake', approvedBy: 'caller' }, sim);
 
   if (diag?.escalated) {
     const why = `Diagnosis stopped: ${diag.state.unknowns} unclear readings. A licensed pro should check this.`;
@@ -229,7 +357,20 @@ function handleStartJob(e: Extract<CallEvent, { kind: 'tool' }>): string {
     return out;
   }
 
-  const hit = parts.lookup(model, symptom);
+  // The voice model sometimes calls start_job with empty args. Fall back to what we already know instead of escalating:
+  // the caller's remembered appliance, then the part named by the diagnosis evidence gathered on this call.
+  const remembered = getProfile(phone)?.appliances?.at(-1);
+  let hit = parts.lookup(model || remembered?.model || '', symptom || job.symptom || 'no heat');
+  if (!hit && diag && Object.keys(diag.state.observations).length > 0) {
+    const tree = loadFaultTree(diag.state.faultTree);
+    const top = topHypothesis(diag.state);
+    const hyp = tree.hypotheses.find((h) => h.id === top.id);
+    const part = partByNumber(hyp?.partNumber);
+    if (part && hyp) {
+      hit = { appliance: tree.appliance, issue: hyp.name, confidence: Math.round(top.p * 100) / 100, part };
+      note(job, `start_job arrived without a model; used the diagnosis lead (${hyp.name}, P=${hit.confidence}).`, simFlag(job, sim));
+    }
+  }
   const danger = guards.safetyKeywords(`${symptom} ${str(a.appliance)}`);
 
   if (!hit) {
@@ -247,6 +388,7 @@ function handleStartJob(e: Extract<CallEvent, { kind: 'tool' }>): string {
   // #11: with test evidence, the confirmed top hypothesis decides the part; otherwise the symptom lookup does.
   let confirmed: { name: string; partNumber: string; p: number } | null = null;
   let partSource = 'symptom lookup';
+  let unconfirmedLead = false;
   if (diag && Object.keys(diag.state.observations).length > 0) {
     const tree = loadFaultTree(diag.state.faultTree);
     const top = topHypothesis(diag.state);
@@ -265,10 +407,32 @@ function handleStartJob(e: Extract<CallEvent, { kind: 'tool' }>): string {
         startJobCache.set(e.callId, out);
         return out;
       } else {
-        note(job, `Diagnosis confirmed ${hyp.name} but the catalog part for this model differs; using the symptom lookup.`, simFlag(job, sim));
+        const why = `Tests confirm the ${hyp.name.toLowerCase()} (P ${top.p.toFixed(2)}) but the catalog part for this model (${hit.part.partNumber}) is a different part. No part is bought; a licensed pro should check this.`;
+        ev(job, 'diagnosis', { appliance: hit.appliance, model, issue: hyp.name, confidence: top.p, label: 'bayesian' }, sim);
+        ev(job, 'safety', { level: 'pro_required', reason: why, source: 'diagnosis', approvedBy: 'code' }, sim);
+        note(job, why, simFlag(job, sim));
+        move(jobId, ['NEW', 'DIAGNOSED'], 'ESCALATED', `diagnosis confirmed ${hyp.name} but the catalog part differs: escalated to a pro, nothing sourced`);
+        const out = `The tests point to the ${hyp.name.toLowerCase()}, but I can't match the right part for your model. I've flagged it for a licensed pro to call you back${consentCallback ? ' on this number' : ''}.`;
+        startJobCache.set(e.callId, out);
+        return out;
       }
     } else {
-      note(job, `Diagnosis not confirmed (top: ${hyp?.name ?? 'none'}, P ${top.p.toFixed(2)}); using the symptom lookup instead.`, simFlag(job, sim));
+      // Not confident. The symptom lookup may stand in only if the readings still favor ITS part as the top cause.
+      const lookupHyp = tree.hypotheses.find((h) => h.partNumber && parts.isIdentical(h.partNumber, hit.part));
+      const lookupP = lookupHyp ? diag.state.posterior[lookupHyp.id] ?? 0 : 0;
+      if (lookupHyp && top.id === lookupHyp.id && lookupP >= LOOKUP_FLOOR) {
+        note(job, `Diagnosis not confirmed (top: ${hyp?.name ?? 'none'}, P ${top.p.toFixed(2)}); the readings still favor the lookup part, so it is sourced as unconfirmed.`, simFlag(job, sim));
+        unconfirmedLead = true;
+      } else {
+        const why = `Tests do not confirm a DIY part: top cause ${hyp?.name.toLowerCase() ?? 'unknown'} (P ${top.p.toFixed(2)}), and the symptom-lookup part ${hit.part.partNumber} is ${lookupHyp ? `${lookupHyp.name.toLowerCase()}, P ${lookupP.toFixed(2)}` : 'not covered by these tests'}. No part is bought; a licensed pro should check this.`;
+        ev(job, 'diagnosis', { appliance: hit.appliance, model, issue: hyp?.name ?? 'Unconfirmed', confidence: top.p, label: 'bayesian' }, sim);
+        ev(job, 'safety', { level: 'pro_required', reason: why, source: 'diagnosis', approvedBy: 'code' }, sim);
+        note(job, why, simFlag(job, sim));
+        move(jobId, ['NEW', 'DIAGNOSED'], 'ESCALATED', `diagnosis unconfirmed (top ${hyp?.name ?? 'none'} P ${top.p.toFixed(2)}) and the lookup part is argued against: escalated to a pro, nothing sourced`);
+        const out = `The tests don't point clearly to one part, and I don't want to order the wrong one. I've flagged this for a licensed pro to call you back${consentCallback ? ' on this number' : ''}.`;
+        startJobCache.set(e.callId, out);
+        return out;
+      }
     }
   }
 
@@ -277,6 +441,7 @@ function handleStartJob(e: Extract<CallEvent, { kind: 'tool' }>): string {
     j.appliance = hit.appliance;
   });
   if (confirmed) ev(job, 'diagnosis', { appliance: hit.appliance, model, issue: confirmed.name, confidence: confirmed.p, label: 'bayesian' }, sim);
+  else if (unconfirmedLead && diag) ev(job, 'diagnosis', { appliance: hit.appliance, model, issue: hit.issue, confidence: topHypothesis(diag.state).p, label: 'bayesian' }, sim);
   else ev(job, 'diagnosis', { appliance: hit.appliance, model, issue: hit.issue, confidence: hit.confidence, label: 'lookup prior' }, sim);
   const level = danger ? 'pro_required' : hit.part.safety;
   ev(job, 'safety', { level, reason: danger?.detail ?? hit.part.safetyNote }, sim);
@@ -316,16 +481,44 @@ function mirrorDiagnosis(jobId: string, state: DiagnosisState) {
   });
 }
 
-/** Next instruction after a reading. The no-tool questions come first; meter tests are offered only once those are used up. */
-function nextInstruction(entry: DiagEntry, tree: FaultTree, acks: string[]): { test: FaultTest | null; text: string } {
-  const unplugged = entry.hasMeter ? [...acks, 'unplugged'] : acks;
-  let t = nextTest(entry.state, tree, { acks: unplugged, hasMeter: entry.hasMeter });
-  if (t) return { test: t, text: t.prompt };
-  if (!entry.hasMeter) {
-    t = nextTest(entry.state, tree, { acks: [...acks, 'unplugged'], hasMeter: true });
-    if (t) return { test: t, text: `If you have a multimeter: ${t.prompt}` };
+const ACK_PHRASE: Record<string, string> = { unplugged: 'it is unplugged from the wall', vent_cleared: 'the vent is cleared' };
+
+/**
+ * Next instruction after a reading. Callers with a meter go straight to the highest-value meter test;
+ * everyone else gets the no-tool questions first, with meter tests offered once those are used up.
+ * Only acks actually given (safety_ack during intake) count; a blocked meter test comes back as an ask-to-unplug.
+ */
+function nextInstruction(entry: DiagEntry, fullTree: FaultTree): { test: FaultTest | null; text: string } {
+  const profile = entry.phone ? getProfile(entry.phone) : undefined;
+  const tree = { ...fullTree, tests: fullTree.tests.filter((t) => !(isConcept(t.concept) && knowsConcept(profile, t.concept) === false)) };
+  const allAcks = [...new Set(tree.tests.flatMap((t) => t.requiresAck))];
+  const pick = (hasMeter: boolean, meterOnly: boolean): { test: FaultTest; blocked: string[] } | null => {
+    const scoped = meterOnly ? { ...tree, tests: tree.tests.filter((t) => t.needsMeter) } : tree;
+    const ok = nextTest(entry.state, scoped, { acks: entry.acks, hasMeter });
+    if (ok) return { test: ok, blocked: [] };
+    const hypo = nextTest(entry.state, scoped, { acks: allAcks, hasMeter });
+    return hypo ? { test: hypo, blocked: hypo.requiresAck.filter((k) => !entry.acks.includes(k)) } : null;
+  };
+  const say = (r: { test: FaultTest; blocked: string[] }, prefix = '') => {
+    const gate = r.blocked.length
+      ? `First ask them to confirm ${r.blocked.map((k) => ACK_PHRASE[k] ?? k).join(' and ')}, and call safety_ack for each. Only then ask: `
+      : '';
+    return { test: r.test, text: `${prefix}${gate}${r.test.prompt}` };
+  };
+  if (entry.noMeter) {
+    const plain = pick(false, false);
+    return plain ? say(plain) : { test: null, text: '' };
   }
-  return { test: null, text: '' };
+  if (entry.hasMeter) {
+    const m = pick(true, true);
+    if (m) return say(m);
+    const any = pick(true, false);
+    return any ? say(any) : { test: null, text: '' };
+  }
+  const plain = pick(false, false);
+  if (plain && plain.blocked.length === 0) return say(plain);
+  const m = pick(true, true);
+  return m ? say(m, 'If they have a multimeter: ') : { test: null, text: '' };
 }
 
 function handleRecordTest(e: Extract<CallEvent, { kind: 'tool' }>): string {
@@ -337,30 +530,50 @@ function handleRecordTest(e: Extract<CallEvent, { kind: 'tool' }>): string {
   const tree = loadFaultTree(DIAG_TREE);
   let entry = diagByCall.get(e.callId);
   if (!entry) {
-    entry = { state: job?.diagnosis ? { ...job.diagnosis } : initialState(tree), hasMeter: false, escalated: false, escalationAnnounced: false };
+    entry = newDiagEntry(e, job, tree);
     diagByCall.set(e.callId, entry);
   }
-  const acks = job?.safetyAcks ?? [];
-  if (entry.escalated) return 'Testing has stopped. Tell them a licensed pro should take a look, then call start_job so it is logged.';
+  for (const k of job?.safetyAcks ?? []) if (!entry.acks.includes(k)) entry.acks.push(k);
+  // Optional: the model says up front whether the caller owns a multimeter, so we skip the walk-to-the-breaker-box detour.
+  const meterArg = e.args.has_meter ?? e.args.hasMeter;
+  if (meterArg !== undefined && meterArg !== '') rememberMeter(entry, bool(meterArg, entry.hasMeter));
 
   const testId = str(e.args.test);
   const reading = str(e.args.reading);
+  if (testId === 'has_meter') {
+    // A fact about the caller, not evidence: no observation, no unknown, no posterior change.
+    const has = meterYes(reading);
+    rememberMeter(entry, has);
+    if (!has && entry.phone && /unknown|don'?t know|do not know|what'?s that|what is/i.test(reading)) {
+      updateProfile(entry.phone, (p) => rememberKnowledge(p, 'multimeter', false));
+    }
+    ev(job ?? null, 'note', { kind: 'memory_update', field: 'hasMeter', value: has, callId: e.callId, text: has ? 'Caller has a multimeter (remembered).' : 'Caller has no multimeter (remembered; meter tests skipped from now on).' }, sim);
+    if (entry.escalated) return 'Noted. Testing has stopped; call start_job so it is logged.';
+    const nxt = nextInstruction(entry, tree);
+    return nxt.test ? `Noted. Next, ask them: ${nxt.text}` : 'Noted. Call start_job with what you know.';
+  }
+  if (entry.escalated) return 'Testing has stopped. Tell them a licensed pro should take a look, then call start_job so it is logged.';
   const test = tree.tests.find((t) => t.id === testId);
   if (!test) {
-    const nxt = nextInstruction(entry, tree, acks);
+    const nxt = nextInstruction(entry, tree);
     return `I don't have a test called "${testId}".${nxt.text ? ` Ask them: ${nxt.text}` : ' Call start_job with what you know.'}`;
   }
   const prev = entry.state;
   const state = observe(prev, tree, test, reading);
   const outcome = state.observations[test.id] ?? UNKNOWN;
-  if (test.needsMeter && outcome !== UNKNOWN) entry.hasMeter = true;
+  if (test.needsMeter && outcome !== UNKNOWN) {
+    rememberMeter(entry, true);
+    if (!test.requiresAck.every((k) => entry.acks.includes(k))) {
+      ev(job ?? null, 'note', { text: `${test.label} meter reading arrived without a recorded ${test.requiresAck.filter((k) => !entry.acks.includes(k)).join(' + ')} acknowledgement.` }, sim);
+    }
+  }
   entry.state = state;
   if (job) mirrorDiagnosis(job.id, state);
 
   const top = topHypothesis(state);
   const confident = isConfident(state);
   const escalate = !confident && state.unknowns >= 2;
-  const nxt = confident || escalate ? { test: null, text: '' } : nextInstruction(entry, tree, acks);
+  const nxt = confident || escalate ? { test: null, text: '' } : nextInstruction(entry, tree);
   ev(job ?? null, 'diagnosis_update', {
     test: test.id,
     reading: outcome,
@@ -383,10 +596,20 @@ function handleRecordTest(e: Extract<CallEvent, { kind: 'tool' }>): string {
     }
     return `That reading was unclear again, so we'll stop testing. Tell them a licensed pro should take a look and I'll flag it, then call start_job so it is logged.`;
   }
-  if (confident) return `That confirms it: the ${hypName(top.id)}. Now call start_job.`;
+  const topHyp = tree.hypotheses.find((h) => h.id === top.id);
+  const fixSentence = topHyp?.fix ? ` The fix is ${topHyp.fix}.` : '';
+  if (confident) return `That confirms it: the ${hypName(top.id)}.${fixSentence} Now call start_job.`;
   const unclear = outcome === UNKNOWN ? `I couldn't use that reading (${state.unknowns} unclear so far). ` : '';
-  if (nxt.test) return `${unclear}Next, ask them: ${nxt.text}`;
-  return `${unclear}No further safe tests are available. Call start_job and say we'll go with the most likely cause, the ${hypName(top.id)}, unconfirmed.`;
+  if (nxt.test) {
+    let guess = '';
+    if (entry.lastToldTop !== top.id) {
+      entry.lastToldTop = top.id;
+      guess = `Best guess so far: ${hypName(top.id)} (${Math.round(top.p * 100)}%)${topHyp?.fix ? `, fix: ${topHyp.fix}` : ''}. `;
+    }
+    return `${unclear}${guess}Next, ask them: ${nxt.text}`;
+  }
+  if (topHyp?.partNumber) return `${unclear}No further safe tests are available. Call start_job and say the most likely cause is the ${hypName(top.id)}, unconfirmed.${fixSentence}`;
+  return `${unclear}No further safe tests are available, and the readings do not point to a part we can order (best guess: ${hypName(top.id)}, P ${top.p.toFixed(2)}). Tell them a licensed pro should take a look, then call start_job so it is logged. Do not name a part.`;
 }
 
 // ---------- sourcing ----------
@@ -468,9 +691,12 @@ function evaluateCallback(jobId: string, timedOut: boolean) {
   } else if (!move(jobId, 'SOURCING', 'AWAITING_CONFIRMATION', `callback trigger: ${trigger}`)) return;
   clearTimers(jobId);
   const why = timedOut ? `Sourcing timeout (${config.caps.sourcingTimeoutSeconds}s)` : 'Sourcing calls finished';
-  // Hang up stragglers.
-  for (const c of sc) {
-    if (c.state !== 'ended') void dialer.endCall(c.callId);
+  // Never hang up on a person mid-conversation: an early trigger lets live calls finish on their own (each is capped
+  // by maxDurationSeconds). Only a real sourcing timeout ends calls that are still going.
+  if (timedOut) {
+    for (const c of sc) {
+      if (c.state !== 'ended') void dialer.endCall(c.callId);
+    }
   }
   const simCtx = anySim(sc);
   const fresh = jobs.get(jobId) ?? job;
@@ -562,7 +788,33 @@ function handleWarranty(job: Job, ctx: CallCtx, a: Record<string, unknown>): str
   jobs.update(job.id, (j) => (j.warranty = { covered, detail }));
   calls.update(ctx.callId, { quoted: true });
   ev(job, 'warranty', { covered, detail, callId: ctx.callId, supplier: partyName(job, ctx.lane, ctx.vendorId) }, ctx);
-  return 'Thank you, that is all I needed. Goodbye.';
+  return 'Say: "Thank you, that is all I needed. Goodbye." and call end_call in the same reply.';
+}
+
+/** What a lane must have recorded before the agent may hang up, and what to ask instead. Lanes not listed hang up freely. */
+const END_NEEDS: Partial<Record<Lane, { done: (job: Job, ctx: CallCtx) => boolean; ask: string }>> = {
+  supplier: {
+    done: (_job, ctx) => ctx.quoted,
+    ask: "Don't hang up yet: you have no price. Ask \"What's the price, what's shipping, and when could it arrive?\", then call record_quote.",
+  },
+  warranty: {
+    done: (job) => !!job.warranty,
+    ask: "Don't hang up yet: you have no warranty answer. Ask once more whether the part is covered, then call record_warranty.",
+  },
+};
+const endPushedBack = new Set<string>(); // callIds already told once to keep going; the second end_call always hangs up
+/** Lets the goodbye spoken alongside end_call finish playing. */
+const HANGUP_DELAY_MS = 4000;
+
+function handleEndCall(job: Job, ctx: CallCtx): string {
+  const need = END_NEEDS[ctx.lane];
+  if (need && !need.done(job, ctx) && !endPushedBack.has(ctx.callId)) {
+    endPushedBack.add(ctx.callId);
+    ev(job, 'note', { kind: 'end_call_blocked', callId: ctx.callId, lane: ctx.lane, text: `${partyName(job, ctx.lane, ctx.vendorId)} call tried to hang up before recording a result; asked once more.` }, ctx);
+    return need.ask;
+  }
+  setTimeout(() => void dialer.endCall(ctx.callId).catch(() => {}), HANGUP_DELAY_MS).unref();
+  return 'Hanging up. If you have not said goodbye yet, say a short thank-you and goodbye now; otherwise say nothing.';
 }
 
 function handleQuote(job: Job, ctx: CallCtx, a: Record<string, unknown>): string {
@@ -612,7 +864,7 @@ function handleQuote(job: Job, ctx: CallCtx, a: Record<string, unknown>): string
     approvedBy: 'code',
     reason,
   }, ctx);
-  return 'Thank you, that is everything I needed. I will be in touch if we order. Goodbye.';
+  return 'Close with exactly: "Okay, thanks. I may call you back. Bye." and call end_call in the same reply.';
 }
 
 function handleOrderDecision(job: Job, ctx: CallCtx, a: Record<string, unknown>): string {
@@ -644,6 +896,27 @@ function handleOrderDecision(job: Job, ctx: CallCtx, a: Record<string, unknown>)
   if (!move(job.id, 'AWAITING_CONFIRMATION', 'DECLINED', `${approver === 'caregiver' ? 'caregiver' : 'caller'} declined the ${best.supplier} deal by voice; nothing ordered`, approver)) return 'Understood. Say goodbye.';
   ev(job, 'order_declined', { supplier: best.supplier, landedTotal: best.landedTotal, callId: ctx.callId, approvedBy: approver, reason: `${approver === 'caregiver' ? 'Caregiver' : 'Caller'} declined by voice; nothing ordered` }, ctx);
   return "No problem, I won't order anything. Thank them and say goodbye.";
+}
+
+/** safety_ack during intake, before start_job: no job yet, so the ack is kept on the call's diagnosis entry and replayed at start_job. */
+function handleIntakeAck(e: Extract<CallEvent, { kind: 'tool' }>): string {
+  const ctx = calls.get(e.callId);
+  if (ctx && ctx.epoch !== getEpoch()) return 'Okay, thank you.';
+  const kind = str(e.args.kind) || 'unknown';
+  const tree = loadFaultTree(DIAG_TREE);
+  let entry = diagByCall.get(e.callId);
+  if (!entry) {
+    entry = newDiagEntry(e, undefined, tree);
+    diagByCall.set(e.callId, entry);
+  }
+  if (!entry.acks.includes(kind)) {
+    entry.acks.push(kind);
+    ev(null, 'safety_ack', { kind, callId: e.callId, phase: 'intake', approvedBy: 'caller' }, ctx ?? (e.callId.startsWith('sim') ? { mode: 'sim' as const } : null));
+  }
+  if (entry.escalated) return `Noted ${kind}. Testing has stopped; call start_job so it is logged.`;
+  const nxt = Object.keys(entry.state.observations).length ? nextInstruction(entry, tree) : null;
+  const follow = nxt?.test ? ` Now ask them: ${nxt.text}` : '';
+  return `Noted ${kind}.${follow}`;
 }
 
 function handleSafetyAck(job: Job, ctx: CallCtx, a: Record<string, unknown>): string {
@@ -697,9 +970,18 @@ async function handleTool(e: Extract<CallEvent, { kind: 'tool' }>): Promise<stri
   if (e.name === 'start_job') {
     const ctx = calls.get(e.callId);
     if (ctx && ctx.epoch !== getEpoch()) return 'Okay.';
-    return handleStartJob(e);
+    const out = handleStartJob(e);
+    try {
+      rememberStartJob(e);
+    } catch (err) {
+      fail('memory', err, calls.get(e.callId)?.jobId ?? null);
+    }
+    return out;
   }
+  if (e.name === 'lookup_caller') return handleLookupCaller(e);
+  if (e.name === 'record_knowledge') return handleRecordKnowledge(e);
   if (e.name === 'record_test') return handleRecordTest(e);
+  if (e.name === 'safety_ack' && !calls.get(e.callId)?.jobId) return handleIntakeAck(e);
   const ctx = calls.get(e.callId);
   if (!ctx || ctx.epoch !== getEpoch()) return 'Okay, thank you.';
   const job = ctx.jobId ? jobs.get(ctx.jobId) : undefined;
@@ -710,6 +992,8 @@ async function handleTool(e: Extract<CallEvent, { kind: 'tool' }>): Promise<stri
       return handleWarranty(job, ctx, e.args);
     case 'record_quote':
       return handleQuote(job, ctx, e.args);
+    case 'end_call':
+      return handleEndCall(job, ctx);
     case 'record_order_decision':
       return handleOrderDecision(job, ctx, e.args);
     case 'safety_ack':
@@ -724,6 +1008,17 @@ async function handleTool(e: Extract<CallEvent, { kind: 'tool' }>): Promise<stri
 
 // ---------- call end ----------
 async function handleEnded(e: Extract<CallEvent, { kind: 'ended' }>): Promise<void> {
+  const orphan = diagByCall.get(e.callId);
+  if (orphan && !orphan.attached && !orphan.droppedNoted && Object.keys(orphan.state.observations).length > 0) {
+    // Intake ended (silence timeout, max duration, hang-up) after readings but before start_job: no job exists, so say so in the log.
+    orphan.droppedNoted = true;
+    const top = topHypothesis(orphan.state);
+    const tree = loadFaultTree(orphan.state.faultTree);
+    const name = tree.hypotheses.find((h) => h.id === top.id)?.name.toLowerCase() ?? top.id;
+    emit(null, 'note', {
+      text: `Intake call ${e.callId} ended (${e.endedReason}) after ${Object.keys(orphan.state.observations).length} diagnosis readings but before start_job; no job was created and nobody will be called back. Top guess ${name} (P ${top.p.toFixed(2)}). The caller needs to redial.`,
+    }, { simulated: e.callId.startsWith('sim') });
+  }
   const ctx = calls.get(e.callId);
   if (!ctx || ctx.epoch !== getEpoch()) return;
   if (endedCalls.has(e.callId)) return;
@@ -795,7 +1090,7 @@ export const orchestrator: Orchestrator = {
         if (hit) return hit;
         const p = handleTool(e).catch((err) => {
           fail(`tool:${e.name}`, err, calls.get(e.callId)?.jobId ?? null);
-          return 'Sorry, one moment.';
+          return 'Saved. Keep the conversation going.';
         });
         if (e.toolCallId) toolCache.set(e.toolCallId, p);
         return p;
@@ -837,7 +1132,7 @@ export const orchestrator: Orchestrator = {
       }
     } catch (err) {
       fail('onCallEvent', err, null);
-      return e.kind === 'tool' ? 'Sorry, one moment.' : undefined;
+      return e.kind === 'tool' ? 'Saved. Keep the conversation going.' : undefined;
     }
     return undefined;
   },
@@ -846,6 +1141,10 @@ export const orchestrator: Orchestrator = {
     const job = jobs.get(jobId);
     if (!job) throw new Error(`Unknown job ${jobId}`);
     if (!move(jobId, 'ORDERED', 'DELIVERED', 'delivery webhook received for the ordered part')) throw new Error(`Job ${jobId} is ${job.state}, not ORDERED`);
+    // Safety acks from the diagnosis call (days earlier) must not satisfy the install gate: re-confirm on the install call.
+    jobs.update(jobId, (j) => {
+      j.safetyAcks = [];
+    });
     const sim = { mode: modeFor('delivery') };
     ev(job, 'delivered', { carrier: 'UPS', partNumber: job.part?.partNumber, simulatedWebhook: true }, sim);
     if (job.part?.safety === 'pro_required') {

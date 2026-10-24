@@ -1,0 +1,173 @@
+{
+  "WP3392519": {
+    "fetchedAt": "2026-10-24T23:00:37.114Z",
+    "note": "Merged across runs of npm run quotes:online -- --write-cache from a live Claude web_search lookup; every URL host appeared in the search results.",
+    "offers": [
+      {
+        "merchant": "Walmart",
+        "url": "https://www.walmart.com/ip/Whirlpool-Dryer-Thermal-Fuse-for-3392519/130144573",
+        "price": 8.7,
+        "shipping": 9.99,
+        "shippingSource": "unknown",
+        "inStock": true,
+        "partNumberShown": "WP3392519",
+        "genuine": true,
+        "eta": null
+      },
+      {
+        "merchant": "Walmart",
+        "url": "https://www.walmart.com/ip/WP3392519-Whirlpool-Thermal-Fuse-OEM-WP3392519/118326081",
+        "price": 8.99,
+        "shipping": 9.99,
+        "shippingSource": "unknown",
+        "inStock": true,
+        "partNumberShown": "WP3392519",
+        "genuine": true,
+        "eta": null
+      },
+      {
+        "merchant": "Home Depot",
+        "url": "https://www.homedepot.com/b/Appliances-Appliance-Parts-Dryer-Parts/WP3392519/N-5yc1vZc35jZ1z1cc3c",
+        "price": 6.02,
+        "shipping": 0,
+        "shippingSource": "listing",
+        "inStock": true,
+        "partNumberShown": "Q-D0031 (OEM Part Number 3392519)",
+        "genuine": false,
+        "eta": null
+      },
+      {
+        "merchant": "Walmart",
+        "url": "https://www.walmart.com/ip/3392519-Dryer-Thermal-Fuse-3-Pack-Replacement-for-Whirlpool-WP3392519-Replaces-Part-AP6008325-3388651-694511/7547654434",
+        "price": 8.75,
+        "shipping": 0,
+        "shippingSource": "listing",
+        "inStock": true,
+        "partNumberShown": "3392519",
+        "genuine": false,
+        "eta": null
+      },
+      {
+        "merchant": "eBay",
+        "url": "https://www.ebay.com/itm/127209218602",
+        "price": 5.99,
+        "shipping": 9.99,
+        "shippingSource": "unknown",
+        "inStock": true,
+        "partNumberShown": "WP3392519",
+        "genuine": false,
+        "eta": null
+      },
+      {
+        "merchant": "Walmart",
+        "url": "https://www.walmart.com/ip/3392519-Whirlpool-Dryer-Thermal-Fuse-Replacement/562266475",
+        "price": 8.02,
+        "shipping": 9.99,
+        "shippingSource": "unknown",
+        "inStock": true,
+        "partNumberShown": "ER3392519",
+        "genuine": false,
+        "eta": null
+      },
+      {
+        "merchant": "Walmart",
+        "url": "https://www.walmart.com/ip/3392519-Dryer-Thermal-Fuse-for-Whirlpool/781293902",
+        "price": 8.7,
+        "shipping": 9.99,
+        "shippingSource": "unknown",
+        "inStock": true,
+        "partNumberShown": "WP3392519",
+        "genuine": false,
+        "eta": null
+      },
+      {
+        "merchant": "eBay",
+        "url": "https://www.ebay.com/itm/398173001087",
+        "price": 8.99,
+        "shipping": 9.99,
+        "shippingSource": "unknown",
+        "inStock": false,
+        "partNumberShown": "WP3392519",
+        "genuine": false,
+        "eta": null
+      },
+      {
+        "merchant": "Walmart",
+        "url": "https://www.walmart.com/ip/Genuine-Whirlpool-2-In-Thermal-Fuse-WP3392519/45031124",
+        "price": 11.64,
+        "shipping": 9.99,
+        "shippingSource": "unknown",
+        "inStock": true,
+        "partNumberShown": "WP3392519",
+        "genuine": true,
+        "eta": null
+      },
+      {
+        "merchant": "Home Depot",
+        "url": "https://www.appliancerepair.homedepot.com/HD11741460-Whirlpool-WP3392519-Dryer-Thermal-Fuse.htm",
+        "price": 15.95,
+        "shipping": 9.99,
+        "shippingSource": "unknown",
+        "inStock": true,
+        "partNumberShown": "WP3392519",
+        "genuine": true,
+        "eta": null
+      },
+      {
+        "merchant": "Home Depot",
+        "url": "https://www.appliancerepair.homedepot.com/PartDetail/Thermal-Fuse/WP3392519/2986",
+        "price": 16.45,
+        "shipping": 9.99,
+        "shippingSource": "unknown",
+        "inStock": true,
+        "partNumberShown": "WP3392519",
+        "genuine": true,
+        "eta": null
+      },
+      {
+        "merchant": "AppliancePartsPros",
+        "url": "https://www.appliancepartspros.com/whirlpool-thermal-fuse-91-wp3392519-ap6008325.html",
+        "price": 16.95,
+        "shipping": 9.99,
+        "shippingSource": "unknown",
+        "inStock": true,
+        "partNumberShown": "WP3392519",
+        "genuine": true,
+        "eta": "Ships Monday"
+      },
+      {
+        "merchant": "PartSelect",
+        "url": "https://www.partselect.com/PS11741460-Whirlpool-WP3392519-Dryer-Thermal-Fuse.htm",
+        "price": 17.15,
+        "shipping": 9.99,
+        "shippingSource": "unknown",
+        "inStock": true,
+        "partNumberShown": "WP3392519",
+        "genuine": true,
+        "eta": "Order now and arrives by May 3"
+      },
+      {
+        "merchant": "RepairClinic",
+        "url": "https://www.repairclinic.com/PartDetail/Thermal-Fuse/WP3392519/2986",
+        "price": 21.19,
+        "shipping": 7.95,
+        "shippingSource": "store_policy",
+        "inStock": true,
+        "partNumberShown": "WP3392519",
+        "genuine": true,
+        "eta": null
+      },
+      {
+        "merchant": "Sears PartsDirect",
+        "url": "https://www.searspartsdirect.com/product/504y9afdt5-0026-110/id-wp3392519",
+        "price": 53.85,
+        "shipping": 9.99,
+        "shippingSource": "unknown",
+        "inStock": true,
+        "partNumberShown": "WP3392519",
+        "genuine": true,
+        "eta": null
+      }
+    ]
+  }
+}
