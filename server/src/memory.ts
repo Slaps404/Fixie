@@ -118,6 +118,16 @@ export function rememberJob(p: CustomerProfile, j: Omit<JobEntry, 'at'> & { at?:
   p.jobs.push({ jobId: j.jobId, issue: j.issue, state: j.state, at: j.at ?? Date.now() });
 }
 
+const MAX_NOTES = 30;
+
+/** Agent-written note about the customer. Exact repeats are dropped; only the newest MAX_NOTES are kept. */
+export function rememberNote(p: CustomerProfile, text: string): void {
+  const t = text.replace(/\s+/g, ' ').trim().slice(0, 300);
+  if (!t || p.notes.at(-1) === t) return;
+  p.notes.push(t);
+  if (p.notes.length > MAX_NOTES) p.notes.splice(0, p.notes.length - MAX_NOTES);
+}
+
 export function rememberKnowledge(p: CustomerProfile, c: Concept, knows: boolean): void {
   p.knows = { ...p.knows, [c]: knows };
 }
@@ -217,6 +227,6 @@ export function summarize(p: CustomerProfile | undefined): string {
     const word = STATE_WORD[lastJob.state] ?? 'in progress, started';
     parts.push(`Last job: ${lastJob.issue}, ${word} ${day(lastJob.at)}.`);
   }
-  if (p.notes.length) parts.push(`Notes: ${p.notes.slice(-2).join('; ')}.`);
+  if (p.notes.length) parts.push(`Your notes on them: ${p.notes.slice(-6).join('; ')}.`);
   return parts.join(' ');
 }

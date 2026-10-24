@@ -114,13 +114,26 @@ test('placeOrder: idempotent per job+quote, so a retried tool call never buys tw
   assert.equal(h.cards.length, 1);
 });
 
-test('placeOrder: refuses rejected, non-identical, or unapproved quotes before issuing a card', async () => {
+test('placeOrder: refuses rejected, non-identical, or unapproved quotes before issuing a card (resolves failed, never throws)', async () => {
   resetOrders();
   const h = harness();
-  await assert.rejects(placeOrder({ job: job(), quote: quote({ rejectedReason: 'over budget' }), approvedBy: 'user_voice' }, h.deps));
-  await assert.rejects(placeOrder({ job: job(), quote: quote({ identicalPart: false }), approvedBy: 'user_voice' }, h.deps));
-  await assert.rejects(placeOrder({ job: job(), quote: quote(), approvedBy: 'code' as never }, h.deps));
+  for (const [q, by] of [[quote({ rejectedReason: 'over budget' }), 'user_voice'], [quote({ identicalPart: false, callId: 'c2' }), 'user_voice'], [quote({ callId: 'c3' }), 'code']] as const) {
+    const r = await placeOrder({ job: job(), quote: q, approvedBy: by as never }, h.deps);
+    assert.equal(r.status, 'failed');
+  }
   assert.equal(h.cards.length, 0);
+  assert.equal(h.events.filter((e) => e.type === 'error' && e.data.where === 'placeOrder').length, 3);
+});
+
+test('placeOrder: an issuer/network error after the card exists closes the card and resolves failed', async () => {
+  resetOrders();
+  const h = harness();
+  const deps = { ...h.deps, merchantFor: () => ({ id: 'm', name: 'Flaky', sandbox: true, checkout: async () => { throw new Error('Lithic GET /v1/transactions/x → 404'); } }) };
+  const r = await placeOrder({ job: job(), quote: quote(), approvedBy: 'user_voice' }, deps);
+  assert.equal(r.status, 'failed');
+  assert.match(r.reason ?? '', /404.*Card ···1305 closed/);
+  assert.ok(h.cards[0].closed);
+  assert.match(String(h.events.at(-1)?.data.detail), /stays a mock order/);
 });
 
 test('CardSecret never serializes the PAN', () => {

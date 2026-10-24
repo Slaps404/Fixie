@@ -4,7 +4,7 @@
 import 'dotenv/config';
 
 const KEY = process.env.VAPI_API_KEY ?? '';
-const TIMEOUT_S = Number(process.env.WAIT_FOR_CALLS_TIMEOUT ?? 300);
+const TIMEOUT_S = Number(process.env.WAIT_FOR_CALLS_TIMEOUT ?? 600);
 const ACTIVE = new Set(['queued', 'ringing', 'in-progress', 'forwarding']);
 
 async function activeCalls(): Promise<number> {

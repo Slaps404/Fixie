@@ -1,0 +1,21 @@
+Says no (callback; agent claude-sonnet-5; ended agent_end_call; 2 agent turns, 24 words/turn)
+
+  0 FIXIE : Hi Dorothy, it's Fixie, the AI assistant you called at 4:30 PM about your dryer. This call is recorded. I found your part for $13.05 total with shipping, arriving Tuesday. Want me to order it?
+  1 CALLER: No thank you, my son is going to handle it. [decision=no]
+  2 FIXIE : That's totally fine, Dorothy.
+   [tool record_order_decision({"approved":false}) → No problem, I won't order anything. Thank them and say goodbye.]
+  4 FIXIE : Sounds good, I'll leave it to your son then. Thanks for calling, Dorothy, take care and have a great day.
+   [tool end_call({}) → Call ended.]
+
+Checks:
+max_turns: pass
+concise: pass
+no_payment: pass
+no_filler: pass
+states_price: pass
+decision_recorded: pass
+approval_truthful: pass
+no_part_number: pass
+no_supplier_name: pass
+price_truthful: pass
+no_commit: pass

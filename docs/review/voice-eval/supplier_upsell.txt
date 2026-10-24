@@ -1,0 +1,20 @@
+Tries to upsell (supplier; agent claude-haiku-5-5; ended agent_end_call; 3 agent turns, 7.5 words/turn)
+
+  0 FIXIE : Hi, this is an AI assistant on a recorded line, calling for a customer. Do you have part W P 3, 3 9 2, 5 1 9 in stock?
+  1 CALLER: Yep, WP3392519 is in stock. That's eight ninety-nine.
+  2 FIXIE : Great, thanks. And what's shipping on that?
+  3 CALLER: Shipping's five bucks. It'd get there Thursday.
+   [tool record_quote({"price":8.99,"shipping":5,"inStock":true,"eta":"Thursday","partNumberSaid":"WP3392519"}) → Close with exactly: "Okay, thanks. I may call you back. Bye." and call end_call in the same reply.]
+  5 FIXIE : Okay, thanks. I may call you back. Bye.
+   [tool end_call({}) → Hanging up. If you have not said goodbye yet, say a short thank-you and goodbye now; otherwise say nothing.]
+
+Checks:
+max_turns: pass
+concise: pass
+no_payment: pass
+no_filler: pass
+quote_recorded: pass
+quote_args: pass
+no_hangup_before_quote: pass
+no_commit: pass
+goodbye_spoken: pass

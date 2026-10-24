@@ -20,7 +20,7 @@ ExecStop=/usr/bin/node --import tsx /root/.t3/projects/compiled/server/scripts/w
 Restart=always
 RestartSec=2
 KillMode=control-group
-TimeoutStopSec=330
+TimeoutStopSec=630
 
 [Install]
 WantedBy=multi-user.target

@@ -135,3 +135,16 @@ test('webhook: a supplier call cannot hang up before a quote; it is told to ask 
   assert.match(driven.endAfterQuoteCall, /call end_call/);
   assert.match(driven.endAfterQuote, /^Hanging up/);
 });
+
+test('webhook: a caller whose part arrived can install on an inbound call, get a text, and leave a note for next time', () => {
+  assert.match(driven.lookupOrdered, /mark_delivered/);
+  assert.match(driven.delivered, /^Delivered\. Install is \d+ steps/);
+  assert.equal(driven.deliveredState, 'DELIVERED');
+  assert.match(driven.delivered, /safety_ack/);
+  assert.match(driven.installStep1, /^Step 2 of \d+/);
+  assert.equal(driven.installState, 'INSTALLING');
+  assert.equal(driven.text, 'Text sent.');
+  assert.equal(driven.note, 'Saved.');
+  assert.match(driven.lookupNextCall, /Prefers a text before each call/);
+  assert.match(driven.lookupNextCall, /Install is at step 1 of/);
+});

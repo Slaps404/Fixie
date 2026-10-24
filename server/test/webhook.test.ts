@@ -236,7 +236,7 @@ test('buildAssistant matches the SPEC §6 shape', () => {
 
   const cb = buildAssistant({ lane: 'user', job, attempt: 1 }) as any;
   assert.ok(cb.model.tools.some((t: any) => t.type === 'endCall'));
-  assert.equal(cb.model.model, config.vapi.model);
+  assert.equal(cb.model.model, process.env.FIXIE_CUSTOMER_MODEL || 'claude-haiku-5-5');
   assert.match(cb.firstMessage, /the AI assistant you called at .+ about your dryer/);
   const priced = buildAssistant({
     lane: 'user',
@@ -246,10 +246,10 @@ test('buildAssistant matches the SPEC §6 shape', () => {
   assert.match(priced.firstMessage, /\$15\.00 total with shipping, arriving Tuesday\. Want me to order it\?$/);
 
   const d = buildAssistant({ lane: 'delivery', job, attempt: 1 }) as any;
-  assert.deepEqual(
-    d.model.tools.filter((t: any) => t.type === 'function').map((t: any) => t.function.name),
-    ['safety_ack', 'install_progress', 'report_fix', 'record_knowledge'],
-  );
+  const deliveryTools = d.model.tools.filter((t: any) => t.type === 'function').map((t: any) => t.function.name);
+  for (const name of ['safety_ack', 'install_progress', 'report_fix', 'record_knowledge', 'send_text', 'save_note']) assert.ok(deliveryTools.includes(name), name);
+  const intakeTools = (buildIntakeAssistant() as any).model.tools.map((t: any) => t.function?.name);
+  for (const name of ['mark_delivered', 'install_progress', 'record_order_decision', 'send_text', 'save_note']) assert.ok(intakeTools.includes(name), name);
 
   const intake = buildIntakeAssistant() as any;
   assert.equal(intake.model.tools[0].function.name, 'lookup_caller');

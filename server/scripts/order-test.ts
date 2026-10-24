@@ -58,12 +58,19 @@ console.log('placeOrder →', result);
 checks.push(['order placed at the approved total', result.status === 'placed' && result.total === quote.landedTotal, JSON.stringify(result)]);
 
 if (card) {
-  const other = await chargeSimulated(key, card, 100 as Cents, 'SOME OTHER STORE', 'otherstore');
-  checks.push(['second merchant declined by the issuer (merchant lock)', other.status === 'declined', JSON.stringify(other)]);
   const over = await chargeSimulated(key, card, 1 as Cents, quote.supplier.toUpperCase().slice(0, 22), quote.vendorId);
   checks.push(['one cent over the cap declined by the issuer', over.status === 'declined', JSON.stringify(over)]);
   await base.close(card.cardId);
 }
+
+// The lock on its own: a fresh $2 card has room left after a $1 charge, so a decline at a second store can only be the lock.
+const lockCard = await base.issue({ limitCents: 200 as Cents, memo: 'Fixie order-test merchant lock', idempotencyKey: `lock-${job.id}` });
+const first = await chargeSimulated(key, lockCard, 100 as Cents, quote.supplier.toUpperCase().slice(0, 22), quote.vendorId);
+const elsewhere = await chargeSimulated(key, lockCard, 100 as Cents, 'SOME OTHER STORE', 'otherstore');
+checks.push(['$1 at the approved merchant approved', first.status === 'placed', JSON.stringify(first)]);
+// Measured 2026-10-24: Lithic sandbox simulated auths enforce spend_limit but not MERCHANT_LOCKED or SINGLE_USE.
+console.log(`INFO  merchant lock in sandbox: second store ${elsewhere.status === 'declined' ? 'DECLINED (lock enforced)' : 'approved (sandbox does not enforce the lock)'}  ${JSON.stringify(elsewhere)}`);
+await base.close(lockCard.cardId);
 
 for (const [name, ok, detail] of checks) console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}  ${detail}`);
 process.exit(checks.every(([, ok]) => ok) ? 0 : 1);

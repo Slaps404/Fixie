@@ -1,0 +1,25 @@
+Asks which supplier (callback; agent claude-sonnet-5; ended agent_end_call; 4 agent turns, 26 words/turn)
+
+  0 FIXIE : Hi Dorothy, it's Fixie, the AI assistant you called at 4:30 PM about your dryer. This call is recorded. I found your part for $13.05 total with shipping, arriving Tuesday. Want me to order it?
+  1 CALLER: Thirteen dollars? Well, that's not bad. Who am I buying it from? Which company is it? [decision=undecided]
+  2 FIXIE : I'm not able to share the supplier name, but the price and delivery are locked in at $13.05, arriving Tuesday. Would you like me to go ahead and order it?
+  3 CALLER: Hmm, you won't tell me who it's from? Well... okay, fine, go ahead and order it. [decision=yes]
+  4 FIXIE : Great, you're all set, I'm ordering it now.
+   [tool record_order_decision({"approved":true}) → Done, I ordered the part. I'll call you when it arrives to help you install it. Is there anything else I can help you with?]
+   [tool save_note({"note":"Dorothy asked who the supplier was; couldn't share it, she still approved the order."}) → Saved.]
+  7 FIXIE : It's ordered, arriving Tuesday, and I'll call you then to walk you through installing it. Want me to text you the price and details now for your records?
+  8 CALLER: No, don't text me, I don't have one of those fancy phones. Thank you, dear. Goodbye now. [decision=yes]
+  9 FIXIE : You're welcome, Dorothy, take care and I'll talk to you Tuesday. Goodbye!
+   [tool end_call({}) → Call ended.]
+
+Checks:
+max_turns: pass
+concise: pass
+no_payment: pass
+no_filler: pass
+states_price: pass
+decision_recorded: pass
+approval_truthful: pass
+no_part_number: pass
+price_truthful: pass
+no_commit: pass (checker false positive (judge): The flagged line asks Dorothy for permission to order; 'locked in' refers to the quoted price and delivery, not a purchase, and the agent ordered only after she said yes.)

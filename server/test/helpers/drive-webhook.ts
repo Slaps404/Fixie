@@ -49,6 +49,20 @@ out.endBeforeQuote = await tool('sA', '+15555557613', 'end_call', {}, supplier);
 out.endBeforeQuoteAgain = await tool('sA', '+15555557613', 'end_call', {}, supplier);
 out.endAfterQuoteCall = await tool('sB', '+15555557614', 'record_quote', { price: 9.1, shipping: 3.95, inStock: true, eta: 'Tuesday', partNumberSaid: 'WP3392519' }, { type: 'outboundPhoneCall', name: `${jobId}|partsdirect|supplier` });
 out.endAfterQuote = await tool('sB', '+15555557614', 'end_call', {}, { type: 'outboundPhoneCall', name: `${jobId}|partsdirect|supplier` });
+// Ann calls back in after her part was ordered: the inbound call must reach her job, not dead-end in intake.
+jobs.update(jobId, (j) => {
+  j.state = 'ORDERED';
+});
+out.lookupOrdered = await tool('dA', '+15555550126', 'lookup_caller', {});
+out.delivered = await tool('dA', '+15555550126', 'mark_delivered', {});
+out.deliveredState = jobs.get(jobId)?.state ?? 'none';
+await tool('dA', '+15555550126', 'safety_ack', { kind: 'unplugged' });
+await tool('dA', '+15555550126', 'safety_ack', { kind: 'vent_cleared' });
+out.installStep1 = await tool('dA', '+15555550126', 'install_progress', { step: 1 });
+out.installState = jobs.get(jobId)?.state ?? 'none';
+out.text = await tool('dA', '+15555550126', 'send_text', { message: 'Here are your steps. Fixie', includeInstallSteps: true });
+out.note = await tool('dA', '+15555550126', 'save_note', { note: 'Prefers a text before each call.' });
+out.lookupNextCall = await tool('dB', '+15555550126', 'lookup_caller', {});
 console.log(JSON.stringify(out));
 server.close();
 process.exit(0);

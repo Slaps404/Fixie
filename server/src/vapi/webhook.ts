@@ -22,6 +22,9 @@ const TOOL_NAMES: ToolName[] = [
   'lookup_caller',
   'record_knowledge',
   'end_call',
+  'send_text',
+  'save_note',
+  'mark_delivered',
 ];
 const FALLBACK_RESULT = 'Saved. Keep the conversation going.';
 /** Tool replies must leave in < 1 s. */

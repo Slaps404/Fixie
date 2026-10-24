@@ -1,0 +1,42 @@
+Mumbles a wrong model number (intake; agent claude-sonnet-5; ended agent_end_call; 8 agent turns, 33.7 words/turn)
+
+  0 FIXIE : Hi, I'm Fixie, an AI assistant. This call is recorded. Is it OK to continue, and OK to call you back on this number?
+  1 CALLER: Yes, that's fine. You can call me back on this number.
+   [tool lookup_caller({}) → New caller.]
+  3 FIXIE : Thanks for that. What appliance is giving you trouble, and what's it doing, or not doing?
+  4 CALLER: It's my clothes dryer, a Whirlpool. It spins fine, but it just won't get hot anymore.
+  5 FIXIE : Got it, no heat but the drum still spins, that's a classic thermal fuse problem. Could you give me the model number off the dryer, usually on a sticker inside the door or on the back?
+  6 CALLER: Um, it's a W E D four eight five one E W, I think. Let me see... yeah, that's what it says.
+  7 FIXIE : Thanks, let me read that back: W E D, 4 8 5 1, E W. Does that sound right?
+  8 CALLER: No, no, four eight ONE FIVE. It's W E D four eight one five E W.
+  9 FIXIE : Got it, W E D, 4 8 1 5, E W. Do you happen to have a multimeter, just to help narrow this down? It's fine if not.
+ 10 CALLER: A what? No, I don't have one of those. I'm not really handy with that kind of thing.
+ 11 FIXIE : No problem, we'll skip that one.
+   [tool record_knowledge({"concept":"multimeter","knows":false}) → Noted.]
+   [tool record_test({"test":"has_meter","reading":"no"}) → Noted. Next, ask them: A half-tripped breaker can cut the heat while the drum still turns, and resetting it is free. Your breaker box is usually a gray metal door in the garage, basement, or a hallway closet. Find the sw]
+ 14 FIXIE : Before anything else, let's check your breaker box, it's free and quick. It's a gray metal door, often in the garage, basement, or a hallway closet, with a switch labeled dryer. Push it fully off, then back on, and try a load, does it heat now?
+ 15 CALLER: Okay, I found the breaker box in the garage. The dryer switch is already all the way on, it's not tripped. I flipped it off and back on, but it still doesn't get hot.
+   [tool record_test({"test":"breaker_check","reading":"ok"}) → Best guess so far: thermal fuse (47%), fix: a cheap thermal fuse, about ten dollars, that most people can swap in twenty minutes; a clogged vent usually blew it, so we clean that too. Next, ask them: Think about the last]
+ 17 FIXIE : Good, the breaker's fine. Think back to your last load, when you opened the door, was there any warmth at all, or was it completely cold?
+ 18 CALLER: Completely cold, Fixie. The drum's going round and round but the air coming out is just room temperature.
+   [tool record_test({"test":"any_warmth","reading":"none"}) → Next, ask them: Start the dryer. Does the drum turn and does the light come on?]
+ 20 FIXIE : You already mentioned the drum turns fine, so that confirms it.
+   [tool record_test({"test":"drum_spins","reading":"yes"}) → No further safe tests are available. Call start_job and say the most likely cause is the thermal fuse, unconfirmed. The fix is a cheap thermal fuse, about ten dollars, that most people can swap in twenty minutes; a clogg]
+   [tool start_job({"appliance":"dryer","model":"WED4815EW","symptom":"no heat, drum spins fine","consentCallback":true}) → Most likely it's a blown thermal fuse, part WP3392519; a blown thermal fuse almost always means the vent is clogged, so we'll clean that too. I'll check your warranty and call parts suppliers now, then call you back on t]
+ 23 FIXIE : That sounds like a blown thermal fuse, a cheap part, and it's often caused by a clogged vent too. I'll check prices and call you right back on this number with the total.
+   [tool save_note({"note":"Whirlpool dryer WED4815EW, no heat/drum spins, likely thermal fuse WP3392519 plus vent cleaning; caller not handy with tools, no multimeter, consented to callback."}) → Saved.]
+ 25 FIXIE : Thanks for your patience, I'll call you back shortly with the price. Goodbye for now.
+   [tool end_call({}) → Call ended.]
+
+Checks:
+max_turns: pass
+concise: pass
+no_payment: pass
+no_filler: pass
+start_job_called: pass
+start_job_args: pass
+job_started: pass
+lookup_first: pass
+no_fabricated_readings: pass
+no_phone_ask: pass
+model_readback: pass

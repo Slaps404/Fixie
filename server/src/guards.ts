@@ -236,16 +236,21 @@ export const guards: Guards = {
 
   safetyKeywords(text) {
     if (!text) return null;
-    const re = /smok|burn|gas smell|smell gas|smells? (like |of )?gas|gas leak|spark|fire/i;
-    if (!re.test(text)) return null;
-    const emergency = /smok|gas|fire/i.test(text);
-    return {
-      ok: false,
-      kind: 'safety',
-      action: 'escalated',
-      detail: emergency
-        ? 'Possible smoke, fire, or gas. Leave the house and call 911. Pro required, no DIY.'
-        : 'Burning or sparking reported. Unplug it and stop using it. Pro required, no DIY.',
-    };
+    // Emergencies: smoke, fire, a gas smell or leak → leave and call 911.
+    const emergency = /smok|fire|gas smell|smell(s|ing)? (like |of )?gas|smell gas|gas leak/i;
+    // Danger but not an emergency: burning or sparking.
+    const hazard = /burn|spark/i;
+    // Any gas appliance (the word "gas", or Whirlpool gas model prefixes like WGD/MGD) is pro-only, never DIY.
+    const gasAppliance = /\bgas\b|\b[WM]GD[0-9A-Z]+/i;
+    if (emergency.test(text)) {
+      return { ok: false, kind: 'safety', action: 'escalated', detail: 'Possible smoke, fire, or gas. Leave the house and call 911. Pro required, no DIY.' };
+    }
+    if (hazard.test(text)) {
+      return { ok: false, kind: 'safety', action: 'escalated', detail: 'Burning or sparking reported. Unplug it and stop using it. Pro required, no DIY.' };
+    }
+    if (gasAppliance.test(text)) {
+      return { ok: false, kind: 'safety', action: 'escalated', detail: "Gas appliance. Don't open it or work on it yourself. A licensed pro must do this repair." };
+    }
+    return null;
   },
 };

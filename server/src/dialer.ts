@@ -8,6 +8,7 @@ import { guards } from './guards.ts';
 import { jobs } from './jobs.ts';
 import { vapiProvider } from './vapi/client.ts';
 import { simProvider } from './vapi/sim.ts';
+import { cast, castFor, recordCast, vendorsForJob } from './commerce/exa-vendors.ts';
 
 const providerFor = (mode: Mode): VoiceProvider => (mode === 'sim' ? simProvider : vapiProvider);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -32,7 +33,30 @@ export function partyName(job: Job | undefined | null, lane: Lane, vendorId?: st
   if (lane === 'user' || lane === 'delivery') return job?.customer.name ?? roster?.user.name ?? 'Customer';
   if (lane === 'warranty') return roster?.warranty.name ?? 'Warranty line';
   if (lane === 'tech') return roster?.tech?.name ?? job?.customer.name ?? 'Tech';
-  return roster?.suppliers.find((s) => s.id === vendorId)?.name ?? vendorId ?? 'Supplier';
+  return castFor(job?.id, vendorId)?.name ?? roster?.suppliers.find((s) => s.id === vendorId)?.name ?? vendorId ?? 'Supplier';
+}
+
+const announced = new Set<string>();
+
+/** Exa finds the real parts counters near the caller once per job (all supplier calls share it, ~0.5s, capped at 2.5s);
+ * each lends its name to a roster slot. The number dialed is still the slot's. */
+async function castSuppliers(job: Job): Promise<void> {
+  const roster = safeRoster();
+  if (!roster?.suppliers.length) return;
+  const d = await vendorsForJob(job.id, job.appliance);
+  if (announced.has(job.id)) return;
+  announced.add(job.id);
+  recordCast(job.id, roster.suppliers, d.vendors);
+  if (!d.vendors.length) return;
+  const named = cast(roster.suppliers, d.vendors);
+  emit(job.id, 'note', {
+    kind: 'vendors_found',
+    freshness: d.freshness,
+    ms: d.ms,
+    vendors: d.vendors.slice(0, named.length).map((v) => ({ name: v.name, address: v.address, listedPhone: v.listedPhone, url: v.url })),
+    text: `Exa found ${named.length} parts counters near ${job.customer?.name ?? 'the caller'} in ${(d.ms / 1000).toFixed(1)}s (${d.freshness}): ${named.map((n) => n.name).join(', ')}. Calling all at once.`,
+    ...(d.error ? { error: d.error } : {}),
+  });
 }
 
 /** Resolve the destination entry. Phones come ONLY from the roster or the job's caller ID. */
@@ -40,7 +64,8 @@ function resolve(job: Job, req: CallRequest, roster: Roster | null): RosterEntry
   switch (req.lane) {
     case 'supplier': {
       const s = roster?.suppliers.find((e) => e.id === req.vendorId);
-      return s ?? null;
+      const found = castFor(job.id, s?.id);
+      return s ? (found ? { ...s, name: found.name } : s) : null;
     }
     case 'warranty':
       return roster?.warranty ?? null;
@@ -72,6 +97,7 @@ async function createWithRetry(provider: VoiceProvider, req: Parameters<VoicePro
 
 export const dialer: Dialer = {
   async placeGuardedCall(job, req) {
+    if (req.lane === 'supplier') await castSuppliers(job).catch(() => {});
     // Everything up to the first await is synchronous, so concurrent callers cannot race past the caps.
     const roster = safeRoster();
     const entry = resolve(job, req, roster);

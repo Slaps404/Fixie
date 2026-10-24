@@ -75,7 +75,8 @@ export interface OrderResult {
   orderId: string | null;
   merchant: string;
   total: number;
-  last4: string;
-  status: 'placed' | 'declined';
+  last4: string | null;
+  /** failed = Fixie or the issuer errored before a charge decision; the orchestrator keeps the mock order. */
+  status: 'placed' | 'declined' | 'failed';
   reason?: string;
 }

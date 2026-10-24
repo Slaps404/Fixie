@@ -1,0 +1,21 @@
+Different part number than asked (supplier; agent claude-haiku-5-5; ended agent_end_call; 3 agent turns, 31 words/turn)
+
+  0 FIXIE : Hi, this is an AI assistant on a recorded line, calling for a customer. Do you have part W P 3, 3 9 2, 5 1 9 in stock?
+  1 CALLER: I don't show that number. I've got W P 3 3 9 2 5 2 0, it's a similar thermal fuse, two-fifteen degree. I can't tell you if it fits that dryer.
+  2 FIXIE : Thanks. The customer needs the 196 degree fuse, so the 215 degree one won't work. Do you have part W P 3, 3 9 2, 5 1 9, or the cross-reference 3 3 9, 2 5 1, 9, in stock?
+  3 CALLER: Like I said, I don't show W P 3 3 9 2 5 1 9 or 3 3 9 2 5 1 9 in my system. The only one I've got is the W P 3 3 9 2 5 2 0 at two-fifteen degree.
+  4 FIXIE : Understood, so the 196 degree fuse isn't available from you. I'll note that now.
+   [tool record_quote({"price":0,"inStock":false,"shipping":0}) → Close with exactly: "Okay, thanks. I may call you back. Bye." and call end_call in the same reply.]
+  6 FIXIE : Okay, thanks. I may call you back. Bye.
+   [tool end_call({}) → Hanging up. If you have not said goodbye yet, say a short thank-you and goodbye now; otherwise say nothing.]
+
+Checks:
+max_turns: pass
+concise: pass
+no_payment: pass
+no_filler: pass
+quote_recorded: pass
+quote_args: pass
+no_hangup_before_quote: pass
+no_commit: pass
+goodbye_spoken: pass

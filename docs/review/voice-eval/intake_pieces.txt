@@ -1,0 +1,54 @@
+Gives the model in pieces (intake; agent claude-sonnet-5; ended agent_end_call; 14 agent turns, 23.2 words/turn)
+
+  0 FIXIE : Hi, I'm Fixie, an AI assistant. This call is recorded. Is it OK to continue, and OK to call you back on this number?
+  1 CALLER: Yeah, that's fine. And yes, you can call me back on this number.
+   [tool lookup_caller({}) → New caller.]
+  3 FIXIE : Thanks for that. What appliance is giving you trouble, and what's it doing, or not doing?
+  4 CALLER: It's my electric clothes dryer. It runs, the drum turns, but it's not getting hot at all.
+  5 FIXIE : Got it, drum turns but no heat, that often points to a small part called the thermal fuse. Can you tell me the model number off the dryer's label?
+  6 CALLER: Sure, hang on, I've got to get down on the floor to see it. It starts with W E D.
+  7 FIXIE : No rush, take your time finding that label.
+  8 CALLER: Thanks, I'm down here looking at it now. Okay, I can see it. Like I said, it starts with W E D.
+  9 FIXIE : Great, what are the rest of the numbers and letters after that?
+ 10 CALLER: Okay, the next part is four eight. That's what I'm seeing on there.
+ 11 FIXIE : That gives us WED48 so far, is there more after that?
+ 12 CALLER: Yeah, there's more. I see one five next.
+ 13 FIXIE : So we have WED4815, is that the end of it, or is there more after the 15?
+ 14 CALLER: There's a little more. It ends with E W.
+ 15 FIXIE : Okay, let me read that back: W E D, four eight one five, E W. Did I get that right?
+ 16 CALLER: Yep, that's it. WED4815EW. Now what do I do about the heat?
+ 17 FIXIE : Good, since the drum already turns fine, let's check one more thing. Have you felt any warmth at all from the dryer, even a little?
+ 18 CALLER: Nope, not even a little. I put my hand right in there and it's stone cold, and the room's no warmer for it either.
+ 19 FIXIE : That's helpful, no warmth at all points right to that small part.
+   [tool record_test({"test":"any_warmth","reading":"none"}) → Best guess so far: thermal fuse (50%), fix: a cheap thermal fuse, about ten dollars, that most people can swap in twenty minutes; a clogged vent usually blew it, so we clean that too. Next, ask them: A half-tripped break]
+ 21 FIXIE : That could also be a half tripped switch in your breaker box, worth a quick free check. Could you find a gray metal door, usually in the garage, basement, or a hallway closet, with a switch labeled dryer?
+ 22 CALLER: Okay, hang on. I found the gray box in the basement. There's a switch labeled dryer. It's fully on, all the way up, and it doesn't look tripped at all.
+   [tool record_test({"test":"breaker_check","reading":"ok"}) → Next, ask them: Start the dryer. Does the drum turn and does the light come on?]
+ 24 FIXIE : Good, that rules out the breaker. Just to confirm, does the drum still turn and does the light come on when it's running?
+ 25 CALLER: Yeah, the drum turns fine when I start it, and the little light on the front comes on too. It just doesn't heat.
+   [tool record_test({"test":"drum_spins","reading":"yes"}) → Next, ask them: If they have a multimeter: First ask them to confirm it is unplugged from the wall, and call safety_ack for each. Only then ask: Your meter has a dial and two wires, one red, one black. Turn the dial to t]
+ 27 FIXIE : Do you happen to have a multimeter at home? It's totally fine if not.
+ 28 CALLER: A what? No, I don't have one of those. I'm not really handy with that kind of stuff.
+ 29 FIXIE : No worries at all, we'll skip that and I'll get this started for you.
+   [tool record_knowledge({"concept":"multimeter","knows":false}) → Noted.]
+   [tool record_test({"test":"has_meter","reading":"no"}) → Noted. Call start_job with what you know.]
+ 32 FIXIE : What's your first name, so I can get this job set up for you?
+ 33 CALLER: It's Hector.
+ 34 FIXIE : Thanks, Hector, getting this set up now.
+   [tool start_job({"appliance":"dryer","model":"WED4815EW","symptom":"drum turns and light comes on, but no heat at all","consentCallback":true,"callerName":"Hector"}) → Most likely it's a blown thermal fuse, part WP3392519; a blown thermal fuse almost always means the vent is clogged, so we'll clean that too. I'll check your warranty and call parts suppliers now, then call you back on t]
+ 36 FIXIE : Hector, it's most likely a small part called the thermal fuse, probably blown because the vent got clogged. I'll check prices and your warranty, then call you back shortly with the cost, sound good?
+   [tool save_note({"note":"Hector, dryer WED4815EW, no heat, likely blown thermal fuse plus clogged vent; not handy, no multimeter, prefers plain walkthroughs; promised callback with price."}) → Saved.]
+ 38 FIXIE : Alright Hector, talk soon, and take care.
+   [tool end_call({}) → Call ended.]
+
+Checks:
+max_turns: pass
+concise: pass
+no_payment: pass
+no_filler: pass
+start_job_called: pass
+start_job_args: pass
+job_started: pass
+lookup_first: pass
+no_fabricated_readings: pass
+no_phone_ask: pass

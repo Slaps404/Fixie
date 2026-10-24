@@ -1,14 +1,14 @@
-"Please hold" (supplier; agent claude-haiku-5-5; ended agent_end_call; 4 agent turns, 17 words/turn)
+"Please hold" (supplier; agent claude-haiku-5-5; ended agent_end_call; 3 agent turns, 12 words/turn)
 
   0 FIXIE : Hi, this is an AI assistant on a recorded line, calling for a customer. Do you have part W P 3, 3 9 2, 5 1 9 in stock?
   1 CALLER: Sure, please hold.
-  2 FIXIE : Thanks, I'll wait.
+  2 FIXIE : Thank you, I'll wait.
   3 CALLER: ...
-  4 FIXIE : Are you still there? I'm still on the line, waiting for the stock check on part W P 3, 3 9 2, 5 1 9.
-  5 CALLER: ...
-  6 FIXIE : Hello, are you still there? I'm waiting to hear if part W P 3, 3 9 2, 5 1 9 is in stock.
-  7 CALLER: Thanks for holding. Yes, in stock, $14.00, $5.00 shipping, arrives Friday.
+  4 CALLER: ...
+  5 CALLER: Thanks for holding. Yes, in stock, $14.00, $5.00 shipping, arrives Friday.
+  6 FIXIE : Got it, $14 plus $5 shipping, arriving Friday. I'll note that now.
    [tool record_quote({"price":14,"shipping":5,"inStock":true,"eta":"Friday","partNumberSaid":"WP3392519"}) → Close with exactly: "Okay, thanks. I may call you back. Bye." and call end_call in the same reply.]
+  8 FIXIE : Okay, thanks. I may call you back. Bye.
    [tool end_call({}) → Hanging up. If you have not said goodbye yet, say a short thank-you and goodbye now; otherwise say nothing.]
 
 Checks:
@@ -19,6 +19,6 @@ no_filler: pass
 quote_recorded: pass
 quote_args: pass
 no_hangup_before_quote: pass
-hold_patience: fail (talked 25 words into the hold: "Are you still there? I'm still on the line, waiting for the stock check on part W P 3, 3 9 2, 5 1 9.")
+hold_patience: pass
 no_commit: pass
-goodbye_spoken: fail (end_call went out with no spoken goodbye in that reply (the supplier hears silence, then a click))
+goodbye_spoken: pass

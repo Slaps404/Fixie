@@ -1,0 +1,31 @@
+Doesn't know what a breaker is (intake; agent claude-sonnet-5; ended agent_end_call; 7 agent turns, 25.3 words/turn)
+
+  0 FIXIE : Hi, I'm Fixie, an AI assistant. This call is recorded. Is it OK to continue, and OK to call you back on this number?
+  1 CALLER: Yes, that's fine. You can call me back on this number. My dryer's dead, nothing happens at all.
+  2 FIXIE : Got it, let's find out what's wrong with your dryer.
+   [tool lookup_caller({}) → New caller.]
+  4 FIXIE : Thanks for confirming that. Can you tell me the model number on your dryer, and roughly when you got it?
+  5 CALLER: It's a Whirlpool. The model number is W E D 4 8 1 5 E W. I got it, oh, maybe six or seven years ago, I think.
+  6 FIXIE : Got it, model W E D 4 8 1 5 E W, about six or seven years old. Since nothing happens at all, let's check the power first, do you have a gray metal door with switches in your garage, basement, or hallway closet?
+  7 CALLER: Hmm, a gray metal door? I don't think so. What's a breaker? Is that the same as a fuse box? Where would I find that?
+   [tool record_knowledge({"concept":"breaker_box","knows":false}) → Noted.]
+  9 FIXIE : It's sometimes called a fuse box too, a gray metal panel with rows of switches, often in a basement, garage, or utility closet. Could you take a look and see if one switch is flipped differently or says "off"?
+ 10 CALLER: Oh, a gray panel with switches. Let me see... I think it's in the basement, behind the stairs. I'll go look. Hold on a minute.
+ 11 FIXIE : Take your time, I'll be right here.
+ 12 CALLER: Okay, I'm back. I went down and looked at the dryer. There's a little switch on the wall behind it, and it's in the middle. I pushed it all the way off and then back on. Now it's running and warm, it works! Thank you so much.
+   [tool record_test({"test":"breaker_check","reading":"ok"}) → Best guess so far: thermal fuse (47%), fix: a cheap thermal fuse, about ten dollars, that most people can swap in twenty minutes; a clogged vent usually blew it, so we clean that too. Next, ask them: Think about the last]
+   [tool save_note({"note":"Whirlpool dryer WED4815EW, fixed by resetting a wall switch behind the dryer; doesn't know breaker box terminology."}) → Saved.]
+ 15 FIXIE : That's wonderful news, your dryer is running and warm now, that's exactly what we want. Is there anything else I can help you with today?
+ 16 CALLER: No, that's all, dear. You've been a big help. Goodbye now.
+ 17 FIXIE : You're very welcome, take care and goodbye!
+   [tool end_call({}) → Call ended.]
+
+Checks:
+max_turns: pass
+concise: pass
+no_payment: pass
+no_filler: pass
+lookup_first: pass
+no_fabricated_readings: pass
+knowledge_recorded: n/a
+no_jargon: pass

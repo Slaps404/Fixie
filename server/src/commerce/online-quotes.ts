@@ -207,8 +207,7 @@ export function toQuote(o: OnlineQuote): Quote & { url: string; freshness: 'live
     vendorId: o.vendorId, supplier: o.merchant, price: o.price, shipping: o.shipping, landedTotal: o.landedTotal,
     inStock: o.inStock, eta: o.eta, partNumberSaid: o.partNumberSaid, identicalPart: o.identicalPart,
     callId: `online_${o.vendorId.slice(7)}_${Date.parse(o.fetchedAt) || 0}`,
-    // Quote.source has no 'online' member yet (types.ts is frozen); docs/issues/16-real-ordering.md adds it.
-    source: 'online' as Quote['source'],
+    source: 'online',
     url: o.url, freshness: o.freshness,
   };
 }

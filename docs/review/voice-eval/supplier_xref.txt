@@ -1,0 +1,22 @@
+Confirms via cross-reference number (supplier; agent claude-haiku-5-5; ended agent_end_call; 4 agent turns, 12 words/turn)
+
+  0 FIXIE : Hi, this is an AI assistant on a recorded line, calling for a customer. Do you have part W P 3, 3 9 2, 5 1 9 in stock?
+  1 CALLER: Three three nine two five one nine? Yep, that's the old number. We list it as A P 6 0 0 8 3 2 5 now. We've got it in stock.
+  2 FIXIE : Thanks. Is AP 6 0 0 8 3 2 5 the same 196 degree dryer thermal fuse?
+  3 CALLER: Yeah, same part. It's the thermal fuse for the dryer, the one you're after.
+  4 FIXIE : Great, thanks. How much is it with shipping to San Diego?
+  5 CALLER: It's $10.25 for the part, plus $4.50 shipping. It arrives Monday.
+   [tool record_quote({"price":10.25,"shipping":4.5,"inStock":true,"eta":"Monday","partNumberSaid":"AP6008325"}) → Close with exactly: "Okay, thanks. I may call you back. Bye." and call end_call in the same reply.]
+  7 FIXIE : Okay, thanks. I may call you back. Bye.
+   [tool end_call({}) → Hanging up. If you have not said goodbye yet, say a short thank-you and goodbye now; otherwise say nothing.]
+
+Checks:
+max_turns: pass
+concise: pass
+no_payment: pass
+no_filler: pass
+quote_recorded: pass
+quote_args: pass
+no_hangup_before_quote: pass
+no_commit: pass
+goodbye_spoken: pass

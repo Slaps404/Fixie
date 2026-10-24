@@ -12,7 +12,10 @@ import { partByNumber, parts } from './parts.ts';
 import { dialer, endCallCtx, partyName, safeRoster, simFlag } from './dialer.ts';
 import { initialState, isConfident, loadFaultTree, nextTest, observe, reasonFor, topHypothesis, UNKNOWN } from './diagnosis.ts';
 import type { DiagnosisState, FaultTest, FaultTree } from './diagnosis.ts';
-import { getProfile, isConcept, knownFacts, knowsConcept, normalizePhone, rememberAppliance, rememberJob, rememberKnowledge, summarize, updateProfile } from './memory.ts';
+import { getProfile, isConcept, knownFacts, knowsConcept, normalizePhone, rememberAppliance, rememberJob, rememberKnowledge, rememberNote, summarize, updateProfile } from './memory.ts';
+import { sendWhatsApp, whatsappEnabled } from './notify/whatsapp.ts';
+import { getOnlineQuotes, toQuote } from './commerce/online-quotes.ts';
+import { placeOrder, resetOrders, revokeCards } from './commerce/place-order.ts';
 
 const TERMINAL: JobState[] = ['FIXED', 'DECLINED', 'ESCALATED', 'STOPPED', 'NOTIFIED'];
 const NON_TERMINAL: JobState[] = ['NEW', 'DIAGNOSED', 'SOURCING', 'AWAITING_CONFIRMATION', 'ORDERED', 'DELIVERED', 'INSTALLING'];
@@ -26,9 +29,11 @@ const startJobCache = new Map<string, string>(); // callId -> spoken result
 const toolCache = new Map<string, Promise<string | undefined>>(); // toolCallId -> result
 const endedCalls = new Set<string>();
 const dialing = new Set<string>(); // jobIds whose sourcing calls are still being placed
+const onlinePending = new Set<string>(); // jobIds whose web-quote lookup is still running
 const stuckHandled = new Set<string>();
 const savings = new Map<string, { savedVsTech: number | null; savedVsNextBest: number | null }>();
 const safetyFlagged = new Set<string>(); // callIds that already tripped transcript safety
+const inboundAttached = new Set<string>(); // inbound callIds attached to an existing open job (not that job's intake or callback)
 const faultTriggered = new Set<string>(); // enterprise jobs whose sourcing already concluded
 const guardsFired = new Map<string, number>(); // jobId -> guard events fired (#12 metrics)
 const voicemailsSkipped = new Map<string, number>(); // jobId -> sourcing/other calls that hit voicemail
@@ -163,14 +168,54 @@ const issueOf = (job: Job) => {
   return job.symptom || job.appliance || 'repair';
 };
 
+/** Inbound call from a customer whose job is past intake: attach the call to that job so every job tool works on it. */
+function openJobFor(e: Extract<CallEvent, { kind: 'tool' }>): Job | undefined {
+  const ctx = calls.get(e.callId);
+  if (ctx?.jobId) return jobs.get(ctx.jobId);
+  if (ctx && ctx.lane !== 'user') return undefined;
+  const phone = callerPhone(e);
+  const job = phone ? jobs.byCaller(phone) : undefined;
+  if (!job || job.kind !== 'consumer' || ['NEW', 'DIAGNOSED'].includes(job.state)) return undefined;
+  ensureInboundCtx(e.callId, phone, job.id);
+  inboundAttached.add(e.callId);
+  if (!job.calls.some((c) => c.callId === e.callId)) {
+    jobs.update(job.id, (j) => j.calls.push({ callId: e.callId, lane: 'user', to: phone, startedAt: Date.now() }));
+  }
+  return jobs.get(job.id);
+}
+
+/** One line for the agent: where the open job stands and what it can do about it right now, on this call. */
+function statusLine(job: Job): string {
+  const part = job.part?.name ?? 'the part';
+  const steps = job.part?.installSteps?.length ?? 0;
+  const deal = job.bestDeal;
+  switch (job.state) {
+    case 'SOURCING':
+      return `Open job: ${job.appliance ?? 'repair'}, ${part}. Still calling suppliers and the warranty line; you'll call them back with the best price within minutes.`;
+    case 'AWAITING_CONFIRMATION':
+      return deal
+        ? `Open job: best price for ${part} is ${usd(deal.landedTotal)} with shipping, arriving ${deal.eta ?? 'in a few days'}. Tell them the price, and if they say order it, call record_order_decision now.`
+        : `Open job: ${part}; no in-stock offer within budget yet.`;
+    case 'ORDERED':
+      return `Open job: ${part} was ordered${deal?.eta ? `, arriving ${deal.eta}` : ''}. If they say it arrived, call mark_delivered and walk them through the ${steps}-step install on this call.`;
+    case 'DELIVERED':
+    case 'INSTALLING':
+      return `Open job: ${part} has arrived. Install is at step ${job.installStep ?? 0} of ${steps}. Offer to walk them through it now: safety_ack unplugged and vent_cleared first, then install_progress.`;
+    default:
+      return `Open job: ${job.state.toLowerCase().replace(/_/g, ' ')}.`;
+  }
+}
+
 function handleLookupCaller(e: Extract<CallEvent, { kind: 'tool' }>): string {
   const phone = callerPhone(e);
   const profile = phone ? getProfile(phone) : undefined;
-  const out = summarize(profile);
+  const open = openJobFor(e);
+  const out = `${summarize(profile)}${open ? ` ${statusLine(open)}` : ''}`;
   const known = knownFacts(profile);
   if (profile?.name) known.unshift(`name: ${profile.name}`);
   for (const a of profile?.appliances ?? []) known.push(`appliance: ${a.appliance} ${a.model}${a.purchaseYear ? ` (${a.purchaseYear})` : ''}`.trim());
   const returning = out !== 'New caller.';
+  if (open) known.push(`open job ${open.id} (${open.state})`);
   const ctx = calls.get(e.callId) ?? (e.callId.startsWith('sim') ? { mode: 'sim' as const } : null);
   emit(null, 'note', {
     kind: 'memory_lookup',
@@ -303,7 +348,8 @@ function handleStartJob(e: Extract<CallEvent, { kind: 'tool' }>): string {
   if (job && !['NEW', 'DIAGNOSED'].includes(job.state)) {
     // Caller already has a job in flight: resume it, don't start a second one.
     const ctx = ensureInboundCtx(e.callId, phone, job.id);
-    const out = `Welcome back. I'm still working on your ${job.appliance ?? 'repair'}; it's at the ${job.state.toLowerCase().replace(/_/g, ' ')} stage, and I'll call you back on this number.`;
+    inboundAttached.add(e.callId);
+    const out = `No new job: this caller already has one. ${statusLine(job)}`;
     ev(job, 'note', { text: `Caller ${maskPhone(phone)} resumed ${job.id} (${job.state}).` }, ctx);
     startJobCache.set(e.callId, out);
     return out;
@@ -371,7 +417,7 @@ function handleStartJob(e: Extract<CallEvent, { kind: 'tool' }>): string {
       note(job, `start_job arrived without a model; used the diagnosis lead (${hyp.name}, P=${hit.confidence}).`, simFlag(job, sim));
     }
   }
-  const danger = guards.safetyKeywords(`${symptom} ${str(a.appliance)}`);
+  const danger = guards.safetyKeywords(`${symptom} ${str(a.appliance)} ${model}`);
 
   if (!hit) {
     ev(job, 'diagnosis', { appliance: str(a.appliance) || 'appliance', model, issue: 'Unknown: model not in the seeded catalog', confidence: 0, label: 'lookup prior' }, sim);
@@ -622,6 +668,7 @@ async function startSourcing(jobId: string): Promise<void> {
   const plan: Array<{ lane: Lane; vendorId?: string }> = [];
   if (job.kind === 'consumer' && roster?.warranty) plan.push({ lane: 'warranty', vendorId: roster.warranty.id });
   for (const s of roster?.suppliers ?? []) plan.push({ lane: 'supplier', vendorId: s.id });
+  if (job.kind === 'consumer') startOnlineQuotes(jobId);
 
   later(jobId, config.caps.sourcingTimeoutSeconds * 1000, () => evaluateCallback(jobId, true));
   addTimer(jobId, setInterval(() => {
@@ -649,6 +696,45 @@ async function startSourcing(jobId: string): Promise<void> {
   evaluateCallback(jobId, false);
 }
 
+/** Web lane, in parallel with the phone calls: web quotes join job.quotes and rank with phone quotes on landed total. */
+function startOnlineQuotes(jobId: string) {
+  const job = jobs.get(jobId);
+  if (!job?.part || process.env.ONLINE_QUOTES === 'off') return;
+  onlinePending.add(jobId);
+  void getOnlineQuotes(job.part, { timeoutMs: Math.max(10, config.caps.sourcingTimeoutSeconds - 15) * 1000 })
+    .then(({ quotes, freshness, error }) => {
+      const cur = jobs.get(jobId);
+      if (!cur || cur.state !== 'SOURCING') return;
+      const found = quotes.map(toQuote).map((q) => {
+        const v = guards.checkQuote(cur, q);
+        if (v && !v.ok) q.rejectedReason = v.detail ?? 'Rejected by guard';
+        return q;
+      });
+      jobs.update(jobId, (j) => j.quotes.push(...found));
+      const usable = found.filter((q) => !q.rejectedReason);
+      const stores = new Set(quotes.map((q) => q.merchant)).size;
+      ev(cur, 'online_quotes', {
+        count: quotes.length, stores, usable: usable.length, freshness, ...(error ? { error } : {}),
+        best: usable[0] ? { supplier: usable[0].supplier, landedTotal: usable[0].landedTotal, url: usable[0].url } : null,
+        approvedBy: 'code',
+        reason: `Checked ${stores} web stores (${freshness === 'live' ? 'live prices' : 'cached prices'}); ${usable.length} identical, in stock, under budget`,
+      }, null);
+      for (const q of usable.filter((q, i, a) => a.findIndex((x) => x.supplier === q.supplier) === i).slice(0, 4)) {
+        ev(cur, 'quote', {
+          supplier: q.supplier, vendorId: q.vendorId, price: q.price, shipping: q.shipping, landedTotal: q.landedTotal,
+          inStock: q.inStock, eta: q.eta, partNumberSaid: q.partNumberSaid, identicalPart: q.identicalPart, rejected: false,
+          source: 'online', freshness, url: q.url, approvedBy: 'code',
+          reason: `${q.supplier} web listing: ${usd(q.landedTotal)} landed, identical part, in stock (${freshness}).`,
+        }, null);
+      }
+    })
+    .catch((err) => fail('onlineQuotes', err, jobId))
+    .finally(() => {
+      onlinePending.delete(jobId);
+      evaluateCallback(jobId, false);
+    });
+}
+
 function runStuckCheck(jobId: string) {
   const job = jobs.get(jobId);
   if (!job || job.state !== 'SOURCING') return;
@@ -670,6 +756,7 @@ function usableQuotes(job: Job): Quote[] {
 function evaluateCallback(jobId: string, timedOut: boolean) {
   const job = jobs.get(jobId);
   if (!job || job.state !== 'SOURCING') return;
+  if (!timedOut && onlinePending.has(jobId)) return;
   const sc = sourcingCalls(jobId);
   let trigger = `sourcing timeout (${config.caps.sourcingTimeoutSeconds}s)`;
   if (!timedOut) {
@@ -877,6 +964,7 @@ function handleOrderDecision(job: Job, ctx: CallCtx, a: Record<string, unknown>)
   const approver: ApprovedBy = a.approvedBy === 'caregiver' ? 'caregiver' : 'user_voice';
   if (approved) {
     if (!move(job.id, 'AWAITING_CONFIRMATION', 'ORDERED', `${approver === 'caregiver' ? 'caregiver' : 'caller'} said yes by voice to ${best.supplier} at ${usd(best.landedTotal)}; within the budget cap`, approver)) return 'The order is already being handled. Say goodbye.';
+    const realOrder = process.env.COMMERCE === 'lithic';
     ev(job, 'order_confirmed', {
       supplier: best.supplier,
       vendorId: best.vendorId,
@@ -886,10 +974,17 @@ function handleOrderDecision(job: Job, ctx: CallCtx, a: Record<string, unknown>)
       eta: best.eta,
       confirmedBy: 'voice',
       approvedBy: approver,
-      reason: `${approver === 'caregiver' ? 'Caregiver' : 'Caller'} said yes by voice; ${usd(best.landedTotal)} is within the budget cap (mock order)`,
+      reason: `${approver === 'caregiver' ? 'Caregiver' : 'Caller'} said yes by voice; ${usd(best.landedTotal)} is within the budget cap${realOrder ? '; paying with a capped virtual card (sandbox)' : ' (mock order)'}`,
       callId: ctx.callId,
-      mockOrder: true,
+      mockOrder: !realOrder,
+      ...(best.url ? { url: best.url } : {}),
     }, ctx);
+    if (realOrder) {
+      // After the tool result, never blocking it; placeOrder never rejects and emits its own error on failure.
+      void placeOrder({ job: jobs.get(job.id) ?? job, quote: best, approvedBy: approver }).then((r) => {
+        if (r.status !== 'placed') note(job, `Card order ${r.status}: ${r.reason ?? 'unknown'}. Kept as a mock order.`, simFlag(job, ctx));
+      });
+    }
     const eta = best.eta ? `, arriving ${best.eta}` : '';
     return `Done, I ordered the part. I'll call you when it arrives to help you install it. Is there anything else I can help you with?`;
   }
@@ -966,6 +1061,67 @@ function handleReportFix(job: Job, ctx: CallCtx, a: Record<string, unknown>): st
   return "Sorry it's still not working. Tell them an install-only pro will follow up, then say goodbye.";
 }
 
+// ---------- agent's own tools: texting, notes, caller-reported delivery ----------
+const CUSTOMER_LANES: Lane[] = ['user', 'delivery'];
+
+/** Texts the customer on this call, and only them: outbound to the dialed number, inbound to caller ID. Never awaits Twilio. */
+function handleSendText(e: Extract<CallEvent, { kind: 'tool' }>): string {
+  const ctx = calls.get(e.callId);
+  if (ctx && !CUSTOMER_LANES.includes(ctx.lane)) return 'Texts go only to the customer.';
+  const job = openJobFor(e) ?? (ctx?.jobId ? jobs.get(ctx.jobId) : undefined);
+  const to = callerPhone(e) || job?.customer.phone || '';
+  if (!to) return "No number to text. Tell them you can't text this number.";
+  let body = str(e.args.message).slice(0, 700);
+  const steps = job?.part?.installSteps ?? [];
+  if (bool(e.args.includeInstallSteps, false) && steps.length) {
+    body = `${body}\n\n${job?.part?.name ?? 'Install'} (${job?.part?.partNumber ?? ''}):\n${steps.map((t, i) => `${i + 1}. ${t}`).join('\n')}\nUnplug it first. Questions? Call (619) 771-1086.`.trim();
+  }
+  if (bool(e.args.includeVideoLink, false) && job?.part) {
+    const q = encodeURIComponent(`${job.part.partNumber} ${job.part.name.replace(/\s*\(.*?\)/g, '')} replacement`);
+    body = `${body}\n\nHow-to videos for your exact part: https://www.youtube.com/results?search_query=${q}`.trim();
+  }
+  if (!body) return 'Nothing to send. Say what the text should say.';
+  const sim = ctx?.mode === 'sim' || e.callId.startsWith('sim');
+  if (sim || !whatsappEnabled()) {
+    emit(job?.id ?? null, 'note', { kind: 'text_sent', to: maskPhone(to), text: body, dryRun: true }, { simulated: sim });
+  } else {
+    void sendWhatsApp(to, body, job?.id ?? null);
+  }
+  return 'Text sent.';
+}
+
+function handleSaveNote(e: Extract<CallEvent, { kind: 'tool' }>): string {
+  const text = str(e.args.note);
+  if (!text) return 'Nothing saved.';
+  const ctx = calls.get(e.callId);
+  const job = ctx?.jobId ? jobs.get(ctx.jobId) : openJobFor(e);
+  const phone = ctx && !CUSTOMER_LANES.includes(ctx.lane) ? job?.customer.phone : callerPhone(e) || job?.customer.phone;
+  if (phone) updateProfile(phone, (p) => rememberNote(p, text));
+  if (job) jobs.update(job.id, (j) => j.notes.push(text.slice(0, 300)));
+  emit(job?.id ?? null, 'note', { kind: 'agent_note', callId: e.callId, text: text.slice(0, 300) }, { simulated: ctx?.mode === 'sim' || e.callId.startsWith('sim') });
+  return 'Saved.';
+}
+
+/** The caller says the part arrived: same transition as the carrier webhook, but the install happens on this call (no new dial). */
+function handleMarkDelivered(job: Job, ctx: CallCtx): string {
+  const steps = job.part?.installSteps ?? [];
+  if (job.state === 'ORDERED') {
+    move(job.id, 'ORDERED', 'DELIVERED', 'caller said the part arrived', 'user_voice');
+    jobs.update(job.id, (j) => {
+      j.safetyAcks = [];
+    });
+    ev(job, 'delivered', { partNumber: job.part?.partNumber, source: 'caller', callId: ctx.callId }, ctx);
+  } else if (!['DELIVERED', 'INSTALLING'].includes(job.state)) {
+    return `Nothing has been ordered yet. ${statusLine(job)}`;
+  }
+  if (!job.part || job.part.safety === 'pro_required' || !steps.length) return 'This part needs a licensed pro to install. Tell them a pro will follow up.';
+  const at = jobs.get(job.id)?.installStep ?? 0;
+  const acks = jobs.get(job.id)?.safetyAcks ?? [];
+  const missing = ['unplugged', 'vent_cleared'].filter((k) => !acks.includes(k));
+  const gate = missing.length ? `First get them to confirm ${missing.map((m) => ACK_PHRASE[m]).join(' and ')}, calling safety_ack for each. ` : '';
+  return `Delivered. Install is ${steps.length} steps; offer to text them the steps too. ${gate}Step ${at + 1}: ${steps[Math.min(at, steps.length - 1)]}`;
+}
+
 async function handleTool(e: Extract<CallEvent, { kind: 'tool' }>): Promise<string | undefined> {
   if (e.name === 'start_job') {
     const ctx = calls.get(e.callId);
@@ -981,11 +1137,14 @@ async function handleTool(e: Extract<CallEvent, { kind: 'tool' }>): Promise<stri
   if (e.name === 'lookup_caller') return handleLookupCaller(e);
   if (e.name === 'record_knowledge') return handleRecordKnowledge(e);
   if (e.name === 'record_test') return handleRecordTest(e);
+  if (e.name === 'send_text') return handleSendText(e);
+  if (e.name === 'save_note') return handleSaveNote(e);
+  if (!calls.get(e.callId)?.jobId) openJobFor(e);
   if (e.name === 'safety_ack' && !calls.get(e.callId)?.jobId) return handleIntakeAck(e);
   const ctx = calls.get(e.callId);
   if (!ctx || ctx.epoch !== getEpoch()) return 'Okay, thank you.';
   const job = ctx.jobId ? jobs.get(ctx.jobId) : undefined;
-  if (!job) return 'Okay, thank you.';
+  if (!job) return e.name === 'end_call' ? 'Okay, thank you.' : 'There is no open job for this caller yet. Diagnose first and call start_job.';
   if (job.state === 'STOPPED' || job.state === 'ESCALATED') return 'This request has been closed. Thank them and end the call.';
   switch (e.name) {
     case 'record_warranty':
@@ -999,9 +1158,12 @@ async function handleTool(e: Extract<CallEvent, { kind: 'tool' }>): Promise<stri
     case 'safety_ack':
       return handleSafetyAck(job, ctx, e.args);
     case 'install_progress':
-      return handleInstall(job, ctx, e.args);
+      if (job.state === 'ORDERED') handleMarkDelivered(job, ctx);
+      return handleInstall(jobs.get(job.id) ?? job, ctx, e.args);
     case 'report_fix':
       return handleReportFix(job, ctx, e.args);
+    case 'mark_delivered':
+      return handleMarkDelivered(job, ctx);
   }
   return 'Okay.';
 }
@@ -1059,7 +1221,7 @@ async function handleEnded(e: Extract<CallEvent, { kind: 'ended' }>): Promise<vo
     await startSourcing(cur.id);
   } else if (SOURCING_LANES.includes(ctx.lane)) {
     evaluateCallback(cur.id, false);
-  } else if (ctx.lane === 'user' && cur.state === 'AWAITING_CONFIRMATION') {
+  } else if (ctx.lane === 'user' && cur.state === 'AWAITING_CONFIRMATION' && !inboundAttached.has(e.callId)) {
     // Callback ended with no decision.
     if (cur.callbackAttempts < 2) {
       note(cur, `Callback ended without a decision (${e.reason}). Retrying once in 20 s.`, simFlag(cur, ctx));
@@ -1079,6 +1241,9 @@ async function stop(jobId: string, reason: string, kind: 'manual' | 'budget'): P
   const live = calls.forJob(jobId).filter((c) => c.state !== 'ended');
   guardEv(job, { kind, action: 'stopped', reason, detail: reason, ...(kind === 'budget' ? { budget: 'agent_spend' } : {}), endedCalls: live.length }, anySim(live));
   await Promise.all(live.map((c) => dialer.endCall(c.callId).catch(() => {})));
+  onlinePending.delete(jobId);
+  const closed = await revokeCards(jobId).catch((err) => (fail('revokeCards', err, jobId), [] as string[]));
+  if (closed.length) note(job, `Kill switch closed virtual card ···${closed.join(', ···')} at the issuer; any later charge is declined.`, anySim(live)?.mode === 'sim');
 }
 
 // ---------- public ----------
@@ -1208,5 +1373,8 @@ export const orchestrator: Orchestrator = {
     guardsFired.clear();
     voicemailsSkipped.clear();
     diagByCall.clear();
+    inboundAttached.clear();
+    onlinePending.clear();
+    resetOrders();
   },
 };

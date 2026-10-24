@@ -43,9 +43,13 @@ export interface Quote {
   /** Computed in code (parts.isIdentical), never trusted from the LLM. */
   identicalPart: boolean;
   callId: string;
-  source: 'tool' | 'claude';
+  /** 'online' = web listing from commerce/online-quotes.ts. */
+  source: 'tool' | 'claude' | 'online';
   /** Set when a guard rejected this quote (e.g. over budget). */
   rejectedReason?: string;
+  /** Online quotes only: the listing, and whether the price was looked up live or from the cached table. */
+  url?: string;
+  freshness?: 'live' | 'cached';
 }
 
 export interface WarrantyResult {
@@ -188,6 +192,9 @@ export type FixieEventType =
   | 'vision_capture'
   | 'vision_rank'
   | 'vision_extract'
+  | 'online_quotes'
+  | 'vcc_issued'
+  | 'order_placed'
   | 'note';
 
 export interface FixieEvent {

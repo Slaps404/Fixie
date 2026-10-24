@@ -131,6 +131,32 @@ const TOOL_DEFS: Record<ToolName, { description: string; parameters: JsonSchema 
       'Hang up. Only after record_quote (supplier) or record_warranty (warranty) has been called. Say your thank-you and goodbye in the same reply. If it says you are missing something, ask for it instead.',
     parameters: { type: 'object', properties: {} },
   },
+  send_text: {
+    description:
+      "Text the customer on this call (WhatsApp). Use it whenever a written copy helps or they ask for one: the install steps, the price, what happens next. Say you're sending it in the same reply.",
+    parameters: {
+      type: 'object',
+      properties: {
+        message: { type: 'string', description: 'The text, short and plain, signed as Fixie' },
+        includeInstallSteps: { type: 'boolean', description: 'Append the numbered install steps for their part' },
+        includeVideoLink: { type: 'boolean', description: 'Append a link to how-to videos for their exact part' },
+      },
+      required: ['message'],
+    },
+  },
+  save_note: {
+    description:
+      'Write a private note about this customer for your future calls: preferences, constraints, promises you made, anything you would want to know next time. Not read aloud. Call alongside your speech.',
+    parameters: {
+      type: 'object',
+      properties: { note: { type: 'string', description: 'One short sentence, e.g. "Prefers texts over calls; daughter Ann helps with tools."' } },
+      required: ['note'],
+    },
+  },
+  mark_delivered: {
+    description: 'The customer says their ordered part has arrived. Records the delivery and returns how to start the install on this call.',
+    parameters: { type: 'object', properties: {} },
+  },
   install_progress: {
     description: 'Record the highest install step the customer finished. Returns the next step to speak.',
     parameters: {
@@ -149,17 +175,28 @@ const TOOL_DEFS: Record<ToolName, { description: string; parameters: JsonSchema 
   },
 };
 
+/** Every customer-facing call carries the same toolkit, so the agent can handle whatever the customer brings up, whichever call it is. */
+const CUSTOMER_TOOLS: ToolName[] = [
+  'record_order_decision',
+  'mark_delivered',
+  'safety_ack',
+  'install_progress',
+  'report_fix',
+  'send_text',
+  'save_note',
+  'record_knowledge',
+];
 const LANE_TOOLS: Record<Lane | 'intake', ToolName[]> = {
-  intake: ['lookup_caller', 'start_job', 'record_test', 'safety_ack', 'record_knowledge'],
+  intake: ['lookup_caller', 'start_job', 'record_test', ...CUSTOMER_TOOLS],
   warranty: ['record_warranty', 'end_call'],
   supplier: ['record_quote', 'end_call'],
-  user: ['record_order_decision'],
-  delivery: ['safety_ack', 'install_progress', 'report_fix', 'record_knowledge'],
+  user: CUSTOMER_TOOLS,
+  delivery: CUSTOMER_TOOLS,
   tech: [],
 };
 
 /** Fire-and-forget tools: Vapi moves on without waiting for our reply. */
-const ASYNC_TOOLS = new Set<ToolName>(['record_knowledge']);
+const ASYNC_TOOLS = new Set<ToolName>(['record_knowledge', 'save_note', 'send_text']);
 
 export function toolsFor(lane: Lane | 'intake'): object[] {
   const server = serverBlock();
@@ -194,7 +231,8 @@ const CONVERSATION_TUNING = {
     backoffSeconds: 1,
     acknowledgementPhrases: ['okay', 'yeah', 'uh-huh', 'mm-hmm', 'right', 'got it', 'sure', 'yes'],
   },
-  startSpeakingPlan: { waitSeconds: 0.3, smartEndpointingPlan: { provider: 'livekit' } },
+  // x = LiveKit's probability they're still talking. Capped at 2.2 s: uncapped, a trailing "like," left a caller in 8 s of silence, three times in one call.
+  startSpeakingPlan: { waitSeconds: 0.3, smartEndpointingPlan: { provider: 'livekit', waitFunction: '300 + 1900 * x' } },
   backgroundSpeechDenoisingPlan: { smartDenoisingPlan: { enabled: true } },
 };
 const TUNING: Partial<Record<Lane | 'intake', object>> = {
@@ -203,8 +241,11 @@ const TUNING: Partial<Record<Lane | 'intake', object>> = {
   delivery: CONVERSATION_TUNING,
 };
 
+/** Customer calls run on Haiku too: same eval pass rate as Sonnet on the replayed live calls, ~0.5 s faster to first token per turn. */
+const CUSTOMER_MODEL = process.env.FIXIE_CUSTOMER_MODEL || HAIKU;
+
 function modelFor(lane: Lane | 'intake'): string {
-  return lane === 'warranty' || lane === 'supplier' || lane === 'tech' ? HAIKU : config.vapi.model;
+  return lane === 'warranty' || lane === 'supplier' || lane === 'tech' ? HAIKU : CUSTOMER_MODEL;
 }
 
 function voice(): object | undefined {

@@ -25,7 +25,10 @@ export type ToolName =
   | 'record_test'
   | 'lookup_caller'
   | 'end_call'
-  | 'record_knowledge';
+  | 'record_knowledge'
+  | 'send_text'
+  | 'save_note'
+  | 'mark_delivered';
 
 /** Everything we know about one phone call. Registered by the dialer, or by the webhook for inbound calls. */
 export interface CallCtx {

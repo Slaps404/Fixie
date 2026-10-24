@@ -1,0 +1,42 @@
+{
+  "fetchedAt": "2026-10-24T23:48:56.408Z",
+  "appliance": "Whirlpool dryer",
+  "vendors": [
+    {
+      "name": "Coast Appliance Parts",
+      "url": "https://www.coastparts.com/locations/SD",
+      "domain": "coastparts.com",
+      "address": "4408 Twain Ave. San Diego, CA 92120",
+      "listedPhone": "(800) 821-0244",
+      "snippet": "San Diego Coast Parts | Coast Appliance Parts Main: 1-800-821-0244 Apartments: 1-800-370-4585 # San Diego Appliance Parts Address 4408 Twain Ave. San Diego, CA 92120 Phone (619) 584-1192 Hours of Operation Monday to Frid",
+      "score": 20
+    },
+    {
+      "name": "Appliance Parts Master",
+      "url": "https://appliancepartsmasters.com/",
+      "domain": "appliancepartsmasters.com",
+      "address": "8880 Rio San Diego Drive, Suite 800, San Diego, CA 92108",
+      "listedPhone": null,
+      "snippet": "-quality parts quickly and affordably. From original manufacturer parts to reliable aftermarket options, we’ve got you covered with expert support ... ## CONTACT - 8880 Rio San Diego Drive, Suite 800, San Diego, CA 92108",
+      "score": 11
+    },
+    {
+      "name": "Browne's Appliance",
+      "url": "https://www.brownesappliance.com/parts-for-sale",
+      "domain": "brownesappliance.com",
+      "address": null,
+      "listedPhone": "(619) 215-1533",
+      "snippet": "Appliance Parts Sales | San Diego, CA (619) 215-1533 Serving the San Diego, CA Area (619) 215-1533 # San Diego, CA Same-Day and Emergency Services No Additional Charge After Hours 15% Off Service Call Fee for Military an",
+      "score": 9.5
+    },
+    {
+      "name": "Advanced Air & Vacuum",
+      "url": "https://advancedairvac.com/pages/parts-department",
+      "domain": "advancedairvac.com",
+      "address": "1677 N Marshall Ave Ste B El Cajon, CA 92020",
+      "listedPhone": "(619) 562-3373",
+      "snippet": "Air Compressor Parts, Oil, Filters & Accessories Shop select compressed air products online, or call or visit our local Parts Departments for thousands of stocked compressor parts, expert support, local pickup, and shipp",
+      "score": 9
+    }
+  ]
+}

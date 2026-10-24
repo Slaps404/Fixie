@@ -2,7 +2,6 @@
 // then check out with it. The cap and the merchant lock live at the card issuer, so a wrong price or a
 // hallucinated second purchase is declined by the network, not by a prompt.
 import { emit as defaultEmit } from '../events.ts';
-import type { FixieEventType } from '../types.ts';
 import { defaultDeps } from './providers.ts';
 import { toCents, type Issuer, type Merchant, type OrderRequest, type OrderResult } from './types.ts';
 
@@ -12,37 +11,56 @@ export interface CommerceDeps {
   emit: typeof defaultEmit;
 }
 
-// Not in the FixieEventType union yet (types.ts is a frozen contract); docs/issues/16-real-ordering.md adds them.
-const VCC_ISSUED = 'vcc_issued' as FixieEventType;
-const ORDER_PLACED = 'order_placed' as FixieEventType;
-
 const inflight = new Map<string, Promise<OrderResult>>();
 /** jobId → cards issued for it, so the kill switch can close them at the issuer. */
 const cardsByJob = new Map<string, Array<{ issuer: Issuer; cardId: string; last4: string }>>();
 
-export async function placeOrder(req: OrderRequest, deps: CommerceDeps = defaultDeps()): Promise<OrderResult> {
+/** Never rejects: refusals and issuer/network errors resolve as status 'failed' and emit error{where:'placeOrder'}. */
+export function placeOrder(req: OrderRequest, deps?: CommerceDeps): Promise<OrderResult> {
   const { job, quote, approvedBy } = req;
-  if (approvedBy !== 'user_voice' && approvedBy !== 'caregiver') throw new Error(`placeOrder needs a human approval, got ${String(approvedBy)}`);
-  if (quote.rejectedReason || !quote.identicalPart || !quote.inStock || !(quote.landedTotal > 0)) {
-    throw new Error(`placeOrder refused quote from ${quote.supplier}: ${quote.rejectedReason ?? 'not an in-stock identical part'}`);
-  }
-  if (!job.part?.partNumber) throw new Error(`job ${job.id} has no part to order`);
   const key = `fixie-${job.id}-${quote.vendorId}-${quote.callId}`;
   const hit = inflight.get(key);
   if (hit) return hit;
-  const p = run(req, key, deps);
+  const p = attempt(req, key, deps);
   inflight.set(key, p);
-  p.catch(() => inflight.delete(key));
+  void p.then((r) => r.status === 'failed' && inflight.delete(key));
   return p;
 }
 
-async function run({ job, quote, approvedBy }: OrderRequest, key: string, deps: CommerceDeps): Promise<OrderResult> {
+async function attempt(req: OrderRequest, key: string, given?: CommerceDeps): Promise<OrderResult> {
+  const { job, quote, approvedBy } = req;
+  const fail = (reason: string, last4: string | null = null): OrderResult => {
+    (given?.emit ?? defaultEmit)(job.id, 'error', { where: 'placeOrder', merchant: quote.supplier, last4, detail: `${reason} The order stays a mock order; nothing was charged.` });
+    return { orderId: null, merchant: quote.supplier, total: quote.landedTotal, last4, status: 'failed', reason };
+  };
+  if (approvedBy !== 'user_voice' && approvedBy !== 'caregiver') return fail(`Refused: needs a human approval, got ${String(approvedBy)}.`);
+  if (quote.rejectedReason || !quote.identicalPart || !quote.inStock || !(quote.landedTotal > 0)) {
+    return fail(`Refused quote from ${quote.supplier}: ${quote.rejectedReason ?? 'not an in-stock identical part'}.`);
+  }
+  if (!job.part?.partNumber) return fail(`Refused: job ${job.id} has no part to order.`);
+  let deps: CommerceDeps;
+  try {
+    deps = given ?? defaultDeps();
+  } catch (err) {
+    return fail(`${(err as Error).message}.`);
+  }
+  let card: { cardId: string; last4: string } | undefined;
+  try {
+    return await run(req, key, deps, (c) => (card = c));
+  } catch (err) {
+    if (card) await deps.issuer.close(card.cardId).catch(() => {});
+    return fail(`${deps.issuer.name} error: ${(err as Error).message.slice(0, 200)}${card ? ` Card ···${card.last4} closed.` : ''}`, card?.last4 ?? null);
+  }
+}
+
+async function run({ job, quote, approvedBy }: OrderRequest, key: string, deps: CommerceDeps, onCard: (c: { cardId: string; last4: string }) => void): Promise<OrderResult> {
   const merchant = deps.merchantFor({ job, quote, approvedBy });
   const limitCents = toCents(quote.landedTotal);
   const card = await deps.issuer.issue({ limitCents, memo: `Fixie ${job.id} ${job.part!.partNumber}`, idempotencyKey: key });
+  onCard(card);
   const sim = merchant.sandbox ? { simulated: true } : {};
   cardsByJob.set(job.id, [...(cardsByJob.get(job.id) ?? []), { issuer: deps.issuer, cardId: card.cardId, last4: card.last4 }]);
-  deps.emit(job.id, VCC_ISSUED, {
+  deps.emit(job.id, 'vcc_issued', {
     issuer: card.issuer,
     last4: card.last4,
     limit: limitCents / 100,
@@ -58,12 +76,12 @@ async function run({ job, quote, approvedBy }: OrderRequest, key: string, deps: 
     return { orderId: null, merchant: merchant.name, total: limitCents / 100, last4: card.last4, status: 'declined', reason: out.reason };
   }
   const result: OrderResult = { orderId: out.orderId, merchant: merchant.name, total: out.chargedCents / 100, last4: card.last4, status: 'placed' };
-  deps.emit(job.id, ORDER_PLACED, {
+  deps.emit(job.id, 'order_placed', {
     ...result,
     partNumber: job.part!.partNumber,
     approvedBy,
     sandbox: merchant.sandbox,
-    ...('url' in quote && typeof quote.url === 'string' ? { url: quote.url } : {}),
+    ...(quote.url ? { url: quote.url } : {}),
     reason: `Paid $${result.total.toFixed(2)} with virtual card ···${card.last4}; ${approvedBy === 'caregiver' ? 'caregiver' : 'caller'} said yes by voice`,
   }, sim);
   return result;

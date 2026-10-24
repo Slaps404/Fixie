@@ -1,0 +1,22 @@
+Covered (warranty; agent claude-haiku-5-5; ended agent_end_call; 3 agent turns, 11 words/turn)
+
+  0 FIXIE : Hi, this is an AI assistant on a recorded line, checking warranty on a customer's dryer. Can you look that up for me?
+  1 CALLER: Sure, what's the model number and the year it was bought?
+  2 FIXIE : The model is W-E-D-4-8-1-5-E-W. It was purchased in 2019.
+  3 CALLER: Okay, let me look that up. ...Alright, that thermal fuse is covered. That unit has the extended thermal component warranty registered. We'd send it free.
+  4 FIXIE : Covered, good. Recording that now.
+   [tool record_warranty({"covered":true,"detail":"Dryer thermal fuse WP3392519 covered under extended thermal component warranty, registered on unit, free shipment of part. Model WED4815EW, purchased 2019."}) → Say: "Thank you, that is all I needed. Goodbye." and call end_call in the same reply.]
+  6 FIXIE : Thank you, that is all I needed. Goodbye.
+   [tool end_call({}) → Hanging up. If you have not said goodbye yet, say a short thank-you and goodbye now; otherwise say nothing.]
+
+Checks:
+max_turns: pass
+concise: pass
+no_payment: pass
+no_filler: pass
+warranty_recorded: pass
+no_hangup_before_result: pass
+gave_facts: pass
+no_personal_details: pass
+no_commit: pass
+goodbye_spoken: pass

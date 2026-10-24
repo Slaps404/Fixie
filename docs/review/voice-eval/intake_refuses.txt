@@ -1,0 +1,33 @@
+Refuses to run any tests (intake; agent claude-sonnet-5; ended agent_end_call; 5 agent turns, 40.3 words/turn)
+
+  0 FIXIE : Hi, I'm Fixie, an AI assistant. This call is recorded. Is it OK to continue, and OK to call you back on this number?
+  1 CALLER: Yeah, that's fine. Call me back on this number, sure. Just get me help with this dryer.
+  2 FIXIE : Thanks! Let me just pull up your info.
+   [tool lookup_caller({}) → New caller.]
+  4 FIXIE : Alright, happy to help with the dryer. What's the model number, and what's it doing?
+  5 CALLER: It's a Whirlpool, model W E D 4 8 1 5 E W. It runs fine, the drum spins, it just doesn't get hot anymore.
+  6 FIXIE : Got it, Whirlpool model W E D 4 8 1 5 E W, drum spins but no heat. That usually points to a small safety fuse that trips and cuts the heat.
+   [tool record_test({"test":"drum_spins","reading":"yes"}) → Best guess so far: thermal fuse (43%), fix: a cheap thermal fuse, about ten dollars, that most people can swap in twenty minutes; a clogged vent usually blew it, so we clean that too. Next, ask them: A half-tripped break]
+   [tool record_test({"test":"any_warmth","reading":"none"}) → Next, ask them: A half-tripped breaker can cut the heat while the drum still turns, and resetting it is free. Your breaker box is usually a gray metal door in the garage, basement, or a hallway closet. Find the switch la]
+  9 FIXIE : Let's do one quick free check first. Can you find the gray metal breaker box, maybe in the garage, basement, or a hallway closet, and look for a switch labeled dryer?
+ 10 CALLER: Nope, I'm not doing any of that, I just want the part ordered. Can you order the part or not?
+ 11 FIXIE : No problem, we'll skip that check. Let's get this started for you.
+   [tool start_job({"appliance":"dryer","model":"WED4815EW","symptom":"drum spins but no heat","consentCallback":true}) → Most likely it's a blown thermal fuse, part WP3392519; a blown thermal fuse almost always means the vent is clogged, so we'll clean that too. I'll check your warranty and call parts suppliers now, then call you back on t]
+ 13 FIXIE : It's most likely a blown thermal fuse, a cheap part, and the vent is probably clogged too which usually causes that. I'll check pricing and your warranty, then call you back shortly on this number with the best price.
+ 14 CALLER: Alright, that sounds good. Call me back on this number, and don't take all day with it. Oh, and it's bought in 2019, if that matters for the warranty.
+   [tool start_job({"appliance":"dryer","model":"WED4815EW","symptom":"drum spins but no heat","consentCallback":true,"purchaseYear":2019}) → Most likely it's a blown thermal fuse, part WP3392519; a blown thermal fuse almost always means the vent is clogged, so we'll clean that too. I'll check your warranty and call parts suppliers now, then call you back on t]
+   [tool save_note({"note":"Dryer purchased in 2019; wants a quick callback, no multimeter/breaker testing, prefers to just get the part ordered."}) → Saved.]
+ 17 FIXIE : Got it, 2019 is noted for the warranty check. I'll call you back soon on this number with the price, thanks for your patience.
+   [tool end_call({}) → Call ended.]
+
+Checks:
+max_turns: pass
+concise: fail (mean 40.3 words/turn (> 35); longest 63)
+no_payment: pass
+no_filler: pass
+start_job_called: pass
+start_job_args: pass
+job_started: pass
+lookup_first: pass
+no_fabricated_readings: pass
+no_phone_ask: pass

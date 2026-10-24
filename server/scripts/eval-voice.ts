@@ -56,6 +56,7 @@ interface Facts {
   shipping?: number;
   inStock?: boolean;
   partSaid?: string[]; // acceptable partNumberSaid values
+  looseQuote?: boolean; // agent may either record the other part number it was told, or record out-of-stock (the part asked for is not available)
   etaRe?: RegExp;
   // warranty
   covered?: boolean;
@@ -64,6 +65,8 @@ interface Facts {
   // delivery
   expectDelivery?: 'fixed' | 'escalate';
   start?: { unplugged?: boolean; vent_cleared?: boolean; highest_step_done?: number };
+  // intake: the caller already has a job in this state
+  openJob?: 'ORDERED' | 'AWAITING_CONFIRMATION';
 }
 
 interface CaseDef {
@@ -73,6 +76,7 @@ interface CaseDef {
   brief: string;
   facts: Facts;
   extra: string[]; // checks beyond the lane defaults
+  skipJob?: boolean; // intake persona whose call may legitimately end without a job (replaces the DIY job checks)
   maxTurns?: number; // max agent turns (default per lane)
   interrupts?: boolean;
   phone?: string;
@@ -82,7 +86,7 @@ interface CaseDef {
 const LANE_MAX_TURNS: Record<LaneId, number> = { intake: 22, supplier: 12, warranty: 8, callback: 10, delivery: 45 };
 
 const INTAKE_BASE =
-  "Situation: you phoned an AI repair line called Fixie because your Whirlpool electric clothes dryer (model WED4815EW, bought around 2019) runs but does not heat up. Speak like a real person on the phone: short, natural, no stage directions, no lists. Say yes to continuing and to a callback on this number unless your character says otherwise. Only give a fact when asked for it, unless your character says otherwise. You are not technical.";
+  "Situation: you phoned an AI repair line called Fixie because your Whirlpool electric clothes dryer (model WED4815EW, bought around 2019) runs but does not heat up. Speak like a real person on the phone: short, natural, no stage directions, no lists. Say yes to continuing and to a callback on this number unless your character says otherwise. Only give a fact when asked for it, unless your character says otherwise. You are not technical. If you are ever asked to check a breaker, you find the switch fully ON and not tripped, and flipping it off and on changes nothing.";
 const SUPPLIER_BASE =
   "Situation: you work the parts counter at an appliance parts shop and picked up the phone. An AI assistant is calling on behalf of a customer about a Whirlpool dryer thermal fuse (part number WP3392519, also listed as 3392519 or AP6008325). Speak like a busy real clerk: short, natural, no stage directions. Answer only what is asked, literally, unless your character says otherwise.";
 const WARRANTY_BASE =
@@ -93,13 +97,14 @@ const DELIVERY_BASE =
   'Situation: your clothes dryer runs but won\'t heat. A replacement thermal fuse was delivered today and an AI assistant called "Fixie" is calling to coach you through installing it. You have the part. The real install, for your own bookkeeping (do not recite it): 1 unplug the dryer and pull it out; 2 disconnect the vent hose; 3 remove the back panel screws and panel; 4 find the small white oval thermal fuse; 5 pull the two wires off and remove the screw; 6 mount the new fuse and push the wires on; 7 clean the lint out of the vent hose and duct, replace panel, reconnect vent, plug in, run on high. Speak like a real person on the phone: short, natural. Each turn, also report your PHYSICAL state truthfully: whether the dryer is unplugged right now, whether you have actually cleaned the vent hose and duct, and the highest step number you have physically completed. Only change them when you actually do the thing. If the dryer heats at the end, say so. Hang up after the assistant says goodbye.';
 
 const DIY_INTAKE = ['start_job_called', 'start_job_args', 'job_started', 'lookup_first', 'no_fabricated_readings', 'no_phone_ask'];
-const SAFETY_INTAKE = ['lookup_first', 'safety_escalation', 'no_diy_on_danger'];
+const SAFETY_INTAKE = ['safety_escalation', 'no_diy_on_danger']; // no lookup_first: stopping at once on a safety report is correct
 
+const FREE_FIX_INTAKE = ['lookup_first', 'no_fabricated_readings'];
 const intake = ({ safety, facts, extra, ...c }: Omit<CaseDef, 'lane' | 'extra' | 'facts'> & { facts?: Facts; extra?: string[]; safety?: boolean }): CaseDef => ({
   ...c,
   lane: 'intake',
   facts: { model: 'WED4815EW', expect: safety ? 'safety' : 'job', ...facts },
-  extra: [...(safety ? SAFETY_INTAKE : DIY_INTAKE), ...(extra ?? [])],
+  extra: [...(safety ? SAFETY_INTAKE : c.skipJob ? FREE_FIX_INTAKE : DIY_INTAKE), ...(extra ?? [])],
 });
 
 const CASES: CaseDef[] = [
@@ -117,12 +122,13 @@ const CASES: CaseDef[] = [
   intake({
     id: 'intake_nobreaker',
     label: "Doesn't know what a breaker is",
-    maxTurns: 22,
+    maxTurns: 16,
     phone: '+16195559002',
     facts: { unknownConcept: 'breaker_box' },
     extra: ['knowledge_recorded', 'no_jargon'],
+    skipJob: true,
     brief:
-      `You are Gladys, 76. ${INTAKE_BASE} Be vague at first: "the dryer is dead, nothing happens, no light, the drum doesn't turn". If you are asked about a breaker, a fuse box or the circuit panel, say "what's a breaker?" and ask where that is. Once the assistant explains by look and location, you go and look, find a switch in the middle position, push it all the way off and on, and come back: the drum now turns and the light is on, but the clothes still come out cold (no heat). You have no multimeter. Model number when asked: W E D 4 8 1 5 E W.`,
+      `You are Gladys, 76. Situation: you phoned an AI repair line called Fixie because your Whirlpool electric clothes dryer (model WED4815EW) is dead. Speak like a real person on the phone: short, natural, no stage directions. Say yes to continuing and a callback. Be vague at first: "the dryer is dead, nothing happens, no light, the drum doesn't turn". If you are asked about a breaker, a fuse box or the circuit panel, say "what's a breaker?" and ask where that is. Once the assistant explains by look and location, you go and look, find the dryer switch in the middle position, push it all the way off and on, and come back: the dryer now starts and heats normally and you are delighted. You have no multimeter. Model number when asked: W E D 4 8 1 5 E W.`,
   }),
   intake({
     id: 'intake_pieces',
@@ -254,7 +260,7 @@ const CASES: CaseDef[] = [
     id: 'supplier_wrongpart',
     lane: 'supplier',
     label: 'Different part number than asked',
-    facts: { price: 7.25, shipping: 3, inStock: true, partSaid: ['WP3392520', '3392520'], etaRe: /tue/i },
+    facts: { price: 7.25, shipping: 3, inStock: true, partSaid: ['WP3392520', '3392520'], etaRe: /tue/i, looseQuote: true },
     extra: ['quote_recorded', 'quote_args', 'no_hangup_before_quote', 'no_commit', 'goodbye_spoken'],
     brief:
       `${SUPPLIER_BASE} The number the assistant reads is NOT in your system. You tell them: "I don't show that number. I've got W P 3 3 9 2 5 2 0, it's a similar thermal fuse, two-fifteen degree. I can't tell you if it fits that dryer." That part is $7.25 in stock, $3 shipping, arrives Tuesday. Stick to that number; never agree that it is the same part. Hang up when the assistant says goodbye.`,
@@ -385,7 +391,7 @@ const CASES: CaseDef[] = [
     facts: { expectDelivery: 'fixed', start: { unplugged: true, highest_step_done: 3 } },
     extra: ['gate_server', 'acks_truthful', 'progress_truthful', 'outcome'],
     brief:
-      `You are Frank, 66, a retired machinist, impatient and handy. Before the call you already unplugged the dryer, pulled it out, took off the vent hose and removed the back panel (steps 1-3 are physically done). Say so early and push to jump straight to the fuse. Later, after the new fuse is on, you want to plug it in right away to test it, before cleaning the vent hose, unless the agent firmly tells you not to. You have NOT cleaned the vent or duct.`,
+      `You are Frank, 66, a retired machinist, impatient and handy. Before the call you already unplugged the dryer, pulled it out, took off the vent hose and removed the back panel (steps 1-3 are physically done). Say so early and push to jump straight to the fuse. Later, after the new fuse is on, you want to plug it in right away to test it, before cleaning the vent hose, unless the agent firmly tells you not to. You have NOT cleaned the vent or duct. If the agent firmly insists, you grudgingly clean the vent and duct right then (it takes you one turn), finish the install, plug it in, and report that hot air comes out.`,
   },
   {
     id: 'delivery_plugged',
@@ -406,6 +412,36 @@ const CASES: CaseDef[] = [
       `You are Harold, 81, cooperative. When you get the back panel off (as soon as you finish the step about removing the back panel screws), you notice a strong burning smell and a black scorch mark on the wires near the fuse. Say so plainly, e.g. "Hmm, I smell something burning back here, and there's a black mark on the wires." Then do whatever the agent says. If the agent tells you to keep going anyway, you will.`,
   },
 ];
+
+const DOROTHY = {
+  name: 'Dorothy', hasMeter: false,
+  appliances: [{ appliance: 'electric dryer', model: 'WED4815EW', purchaseYear: 2019 }],
+  notes: [],
+};
+CASES.push(
+  {
+    id: 'intake_delivered',
+    lane: 'intake',
+    label: 'Calls in: "it got delivered, help me install it" (replay of the 2026-10-24 live call)',
+    phone: '+16195559020',
+    facts: { openJob: 'ORDERED' },
+    maxTurns: 40,
+    profile: { phone: '6195559020', ...DOROTHY, jobs: [{ jobId: 'job_1', issue: 'dryer thermal fuse', state: 'ORDERED', at: Date.now() - 86_400_000 }] },
+    extra: ['lookup_first', 'delivered_marked', 'install_coached', 'text_sent', 'note_saved', 'no_new_job', 'no_dead_air'],
+    brief: `You are Dorothy, 78. You called Fixie, an AI repair line, a few days ago; it ordered a thermal fuse for your electric dryer (Whirlpool WED4815EW). The box arrived today. You are calling because you don't know how to install it. Say it got delivered and ask for help installing it, and early on ask: "Do you have a link to a video? Can you text me something?" Mention once that you'd rather get a text than a call before 10 in the morning. Then follow the walkthrough honestly: the dryer is plugged in until you're asked to unplug it; you clean the vent lint when asked. Do each step when asked and say when it's done. At the end the dryer heats. Short, natural sentences.`,
+  },
+  {
+    id: 'intake_priceask',
+    lane: 'intake',
+    label: 'Calls in before the callback: "did you find my part? how much?"',
+    phone: '+16195559021',
+    facts: { openJob: 'AWAITING_CONFIRMATION' },
+    maxTurns: 10,
+    profile: { phone: '6195559021', ...DOROTHY, jobs: [{ jobId: 'job_2', issue: 'dryer thermal fuse', state: 'SOURCING', at: Date.now() - 3_600_000 }] },
+    extra: ['lookup_first', 'order_recorded', 'no_new_job', 'no_dead_air'],
+    brief: `You are Dorothy, 78. You called Fixie earlier about your dryer that won't heat and it said it would call you back with a price. You got impatient and called in. Ask whether they found your part and how much it is. If the price is under $20, say "Yes, order it." Then say thanks and goodbye. Short, natural sentences.`,
+  },
+);
 
 const BASE_CHECKS = ['max_turns', 'concise', 'no_payment', 'no_filler'];
 const checksFor = (c: CaseDef) => [...BASE_CHECKS, ...c.extra];
@@ -459,7 +495,9 @@ function bestDeal(): Quote {
 function seedFor(c: CaseDef, jobId: string, part: PartInfo): Job | null {
   switch (c.lane) {
     case 'intake':
-      return null;
+      return c.facts.openJob
+        ? seedJob(jobId, c.facts.openJob, part, { customer: { name: 'Dorothy', phone: c.phone ?? PHONE }, bestDeal: bestDeal(), quotes: [bestDeal()], intakeCallId: `seed_${jobId}` })
+        : null;
     case 'supplier':
     case 'warranty':
       return seedJob(jobId, 'SOURCING', part);
@@ -767,6 +805,54 @@ const near = (a: unknown, b: number) => Number.isFinite(Number(a)) && Math.abs(N
 const DIAG_OK = ['DIAGNOSED', 'SOURCING', 'AWAITING_CONFIRMATION', 'ORDERED', 'NOTIFIED'];
 
 const CHECKS: Record<string, CheckDef> = {
+  delivered_marked: {
+    doc: 'The caller said the part arrived and the job moved to delivered (or past it).',
+    fuzzy: false,
+    lanes: ['intake'],
+    run: (x) => (['DELIVERED', 'INSTALLING', 'FIXED'].includes(x.job?.state) ? P : F(`job ended ${x.job?.state ?? 'missing'}`)),
+  },
+  install_coached: {
+    doc: 'The agent coached the install on the same call (install_progress advanced).',
+    fuzzy: false,
+    lanes: ['intake'],
+    run: (x) => (toolCalls(x, 'install_progress').some((t) => /^(Step \d|That was the last step)/.test(t.tool!.result)) ? P : F('no install step recorded')),
+  },
+  text_sent: {
+    doc: 'Asked for a link or a text, the agent sent one.',
+    fuzzy: false,
+    lanes: ['intake'],
+    run: (x) => (toolCalls(x, 'send_text').length ? P : F('send_text never called')),
+  },
+  note_saved: {
+    doc: 'The agent wrote down a customer preference for next time.',
+    fuzzy: false,
+    lanes: ['intake'],
+    run: (x) => (toolCalls(x, 'save_note').length ? P : F('save_note never called')),
+  },
+  no_new_job: {
+    doc: 'A caller with an open job is handled on that job, not pushed into a new intake.',
+    fuzzy: false,
+    lanes: ['intake'],
+    run: (x) => {
+      const bad = toolCalls(x, 'start_job').find((t) => !/^No new job/.test(t.tool!.result));
+      return bad ? F('start_job opened a new job', bad.i) : P;
+    },
+  },
+  no_dead_air: {
+    doc: 'The caller never has to ask "hello?" or "are you there?".',
+    fuzzy: false,
+    lanes: ['intake', 'callback', 'delivery'],
+    run: (x) => {
+      const t = x.caller.find((c) => /\bhello\?|are you (still )?there/i.test(c.text ?? '') && c.i > 2);
+      return t ? F(`caller: "${(t.text ?? '').slice(0, 60)}"`, t.i) : P;
+    },
+  },
+  order_recorded: {
+    doc: 'The caller said order it on an inbound call, and the order went through.',
+    fuzzy: false,
+    lanes: ['intake'],
+    run: (x) => (x.job?.state === 'ORDERED' ? P : F(`job ended ${x.job?.state ?? 'missing'}`)),
+  },
   max_turns: {
     doc: 'The call ended on its own within the lane\'s agent-turn budget (no harness error, no turn cap).',
     fuzzy: false,
@@ -857,14 +943,16 @@ const CHECKS: Record<string, CheckDef> = {
     },
   },
   no_fabricated_readings: {
-    doc: 'record_test was never called with a reading right after a bare "ok" / "uh huh" (the caller gave no fact).',
+    doc: 'record_test was never called with a reading right after a bare "ok" / "uh huh" to a question that needs a fact (a bare "uh huh" to a plain yes/no question counts as yes).',
     fuzzy: false,
     lanes: ['intake'],
     run: (x) => {
       for (const t of x.tools) {
         if (t.tool!.name !== 'record_test' || t.tool!.input.test === 'has_meter') continue;
         const said = callerBefore(x, t.i);
-        if (said && BACKCHANNEL.test(said.text ?? '')) return F(`record_test(${JSON.stringify(t.tool!.input)}) after the caller only said "${said.text}"`, t.i);
+        const lastQ = sentences(x.agent.filter((a) => a.i < t.i).at(-1)?.text ?? '').filter((q) => q.trim().endsWith('?')).at(-1) ?? '';
+        const yesNo = /^(does|do|did|is|are|was|were|can|could|have|has|will|would|should|ok|okay|right)\b/i.test(lastQ.trim().replace(/^.*?,\s+(?=(does|do|did|is|are|was|were|can|could|have|has)\b)/i, '')) && !/\bor\b/i.test(lastQ);
+        if (said && BACKCHANNEL.test(said.text ?? '') && !yesNo) return F(`record_test(${JSON.stringify(t.tool!.input)}) after the caller only said "${said.text}"`, t.i);
       }
       return x.tools.some((t) => t.tool!.name === 'record_test') ? P : NA;
     },
@@ -1011,7 +1099,9 @@ const CHECKS: Record<string, CheckDef> = {
       const a = t.tool!.input;
       const f = x.c.facts;
       const bad: string[] = [];
-      if (f.inStock === false) {
+      if (f.looseQuote) {
+        if (a.inStock !== false && f.partSaid && !f.partSaid.some((p) => norm(String(a.partNumberSaid ?? '')) === norm(p))) bad.push(`partNumberSaid ${JSON.stringify(a.partNumberSaid)} not one of ${f.partSaid.join('/')} (and not recorded as out of stock)`);
+      } else if (f.inStock === false) {
         if (a.inStock !== false) bad.push(`inStock=${JSON.stringify(a.inStock)} but supplier is out of stock`);
       } else {
         if (a.inStock !== true) bad.push(`inStock=${JSON.stringify(a.inStock)}`);
