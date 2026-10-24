@@ -1,0 +1,10 @@
+node_modules/
+.env
+.env.*
+!.env.example
+server/data/events.jsonl
+server/data/jobs.json
+server/data/quotes.jsonl
+.DS_Store
+server/data/roster.json
+.verify-artifacts/

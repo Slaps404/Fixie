@@ -1,0 +1,52 @@
+{
+  "_note": "Seed data for the parts graph. Seeded rows are labeled as seeded on stage; learned quotes go to quotes.jsonl.",
+  "models": {
+    "WED4815EW": {
+      "brand": "Whirlpool",
+      "appliance": "Whirlpool electric dryer",
+      "symptoms": {
+        "no_heat": {
+          "issue": "Blown thermal fuse",
+          "confidence": 0.82,
+          "partNumber": "WP3392519"
+        }
+      }
+    }
+  },
+  "faultCodes": {
+    "SPN 3226 FMI 4": {
+      "issue": "Aftertreatment outlet NOx sensor circuit low",
+      "confidence": 0.77,
+      "partNumber": "NOX-5WK97401"
+    }
+  },
+  "parts": {
+    "WP3392519": {
+      "partNumber": "WP3392519",
+      "name": "Dryer thermal fuse (196°F)",
+      "crossRefs": ["3392519", "AP6008325", "PS11741110"],
+      "safety": "diy_with_caution",
+      "safetyNote": "Unplug the dryer before touching anything. If it's a gas dryer, stop and call a pro.",
+      "rootCauseNote": "A blown thermal fuse almost always means the vent is clogged. Clean the lint trap duct and the outside vent, or the new fuse will blow too, and it's a fire risk.",
+      "techVisitCost": 200,
+      "installSteps": [
+        "Unplug the dryer from the wall and pull it out so you can reach the back.",
+        "Disconnect the vent hose from the back of the dryer and set it aside.",
+        "Remove the screws along the bottom edge of the back panel, then lift the panel off.",
+        "Find the thermal fuse: a small white oval piece with two wires, mounted on the exhaust duct near the blower.",
+        "Pull the two wires off the old fuse and remove its one screw.",
+        "Mount the new fuse with the same screw and push the two wires back on, either way round.",
+        "Clean the lint out of the vent hose and the duct, put the panel back, reconnect the vent, plug in, and run it on high for a minute."
+      ]
+    },
+    "NOX-5WK97401": {
+      "partNumber": "NOX-5WK97401",
+      "name": "Aftertreatment outlet NOx sensor (Cummins 6.7, terminal tractor)",
+      "crossRefs": ["5WK97401", "4326864RX", "2894940RX"],
+      "safety": "pro_required",
+      "safetyNote": "Exhaust components are hot and the tractor must be locked out. Certified yard tech only.",
+      "techVisitCost": 0,
+      "installSteps": []
+    }
+  }
+}

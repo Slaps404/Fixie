@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fixie: plan demo</title>
+<style>
+  :root { --gap: 14px; }
+  * { box-sizing: border-box; }
+  body { font-family: var(--font-sans, system-ui, sans-serif); color: var(--foreground); }
+  .wrap { display: flex; flex-direction: column; gap: 22px; padding: 4px 0 8px; }
+  .eyebrow { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted-foreground); }
+  h1 { margin: 2px 0 6px; font-size: 26px; line-height: 1.15; }
+  h2 { margin: 0 0 10px; font-size: 16px; }
+  .tag { color: var(--muted-foreground); font-size: 14px; line-height: 1.5; margin: 0; }
+  .pills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .pill { font-size: 12px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted-foreground); }
+  .pill.on { background: var(--accent-surface); color: var(--accent-surface-foreground); border-color: transparent; }
+
+  /* Simulator */
+  .sim { border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; background: var(--card); color: var(--card-foreground); }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+  button { font: inherit; font-size: 13px; padding: 6px 12px; border-radius: calc(var(--radius) - 2px); border: 1px solid var(--border); background: var(--secondary); color: var(--secondary-foreground); cursor: pointer; }
+  button.primary { background: var(--primary); color: var(--primary-foreground); border-color: transparent; }
+  .stages { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+  .stage { font-size: 12px; padding: 4px 9px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted-foreground); cursor: pointer; user-select: none; }
+  .stage.done { color: var(--foreground); }
+  .stage.active { background: var(--accent-surface); color: var(--accent-surface-foreground); border-color: transparent; font-weight: 600; }
+  .cols { display: grid; grid-template-columns: 1fr 1.25fr; gap: var(--gap); }
+  @media (max-width: 620px) { .cols { grid-template-columns: 1fr; } }
+  .panel { border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); padding: 12px; background: var(--background); min-height: 360px; display: flex; flex-direction: column; }
+  .panel h3 { margin: 0 0 2px; font-size: 13px; }
+  .panel .sub { font-size: 11.5px; color: var(--muted-foreground); margin-bottom: 10px; }
+  .phonebar { display: flex; justify-content: space-between; align-items: center; font-size: 12px; padding: 7px 10px; border-radius: 8px; background: var(--secondary); color: var(--secondary-foreground); margin-bottom: 10px; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted-foreground); margin-right: 6px; vertical-align: middle; }
+  .dot.live { background: var(--success); box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 25%, transparent); }
+  .feed { display: flex; flex-direction: column; gap: 7px; overflow-y: auto; max-height: 330px; scroll-behavior: smooth; }
+  .line { font-size: 13px; line-height: 1.42; animation: in .25s ease-out; }
+  .line b { font-weight: 600; }
+  .line.agent b { color: var(--accent); }
+  .line.user b { color: var(--chart-2); }
+  .line.sys { font-size: 11.5px; color: var(--muted-foreground); font-style: italic; }
+  @keyframes in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  .ev { font-size: 12.5px; line-height: 1.4; padding: 7px 9px; border-radius: 8px; border-left: 3px solid var(--border); background: var(--secondary); color: var(--secondary-foreground); animation: in .25s ease-out; }
+  .ev .k { font-family: var(--font-mono, monospace); font-size: 11px; color: var(--muted-foreground); margin-right: 6px; }
+  .ev.call { border-left-color: var(--chart-1); }
+  .ev.good { border-left-color: var(--success); }
+  .ev.warn { border-left-color: var(--warning); }
+  .ev.bad { border-left-color: var(--destructive); }
+  .ev.ent { border-left-color: var(--chart-4); }
+  .meters { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px; }
+  .meter { font-size: 11px; color: var(--muted-foreground); }
+  .meter .bar { height: 6px; border-radius: 3px; background: var(--secondary); margin-top: 4px; overflow: hidden; }
+  .meter .fill { height: 100%; width: 0; background: var(--chart-1); transition: width .4s ease; }
+  .meter .val { color: var(--foreground); font-variant-numeric: tabular-nums; }
+  .saved { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; padding: 8px 10px; border-radius: 8px; background: var(--accent-surface); color: var(--accent-surface-foreground); }
+  .saved .n { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .saved .l { font-size: 12px; }
+
+  /* Sections */
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap); }
+  @media (max-width: 620px) { .grid2 { grid-template-columns: 1fr; } }
+  .card { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
+  .card p, .card li { font-size: 13.5px; line-height: 1.5; color: var(--muted-foreground); }
+  .card ul { margin: 6px 0 0; padding-left: 18px; }
+  .card strong { color: var(--foreground); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted-foreground); font-weight: 600; }
+  td.y { color: var(--success); font-weight: 600; }
+  td.n { color: var(--muted-foreground); }
+  td.p { color: var(--warning); }
+  tr.us td { background: var(--accent-surface); color: var(--accent-surface-foreground); }
+  tr.us td.y { color: var(--accent-surface-foreground); }
+  .slices { display: flex; flex-direction: column; gap: 6px; }
+  .slice { display: grid; grid-template-columns: 54px 1fr 64px; gap: 10px; align-items: start; font-size: 13px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; }
+  .slice .s { font-weight: 700; font-family: var(--font-mono, monospace); font-size: 12px; color: var(--accent); }
+  .slice .t { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted-foreground); font-size: 12px; }
+  .slice .d { color: var(--muted-foreground); font-size: 12px; margin-top: 2px; }
+  .cut { text-align: center; font-size: 11.5px; font-weight: 700; letter-spacing: .08em; color: var(--destructive); border-top: 2px dashed var(--destructive); padding-top: 4px; margin: 4px 0; }
+  .slice.after { opacity: .75; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">c0mpiled-16 · UCSD · Invisible Interfaces</div>
+    <h1>Fixie: one number to call when anything breaks</h1>
+    <p class="tag">Assistants tell you how to fix it. Fixie diagnoses it by voice, claims the warranty or finds the cheapest identical part, orders it on your spoken "yes", and calls you when the box arrives to walk you through the install. No app, no screen, any phone.</p>
+    <div class="pills">
+      <span class="pill on">No App</span><span class="pill on">Unsupervised</span><span class="pill on">Dispatch (port beat)</span>
+      <span class="pill">Vapi + Twilio + Claude</span><span class="pill">TypeScript / Node</span>
+    </div>
+  </header>
+
+  <section class="sim">
+    <div class="controls">
+      <button class="primary" id="play">▶ Play demo</button>
+      <button id="restart">↺ Restart</button>
+      <button id="speed">Speed 1×</button>
+      <span style="font-size:12px;color:var(--muted-foreground)">Left: everything Dorothy experiences (sound only). Right: the judges-only board.</span>
+    </div>
+    <div class="stages" id="stages"></div>
+    <div class="cols">
+      <div class="panel">
+        <h3>📞 Dorothy's phone</h3>
+        <div class="sub">She never looks at a screen. This is what she hears.</div>
+        <div class="phonebar"><span id="callstate"><span class="dot"></span>Idle</span><span id="calltimer">00:00</span></div>
+        <div class="feed" id="phone"></div>
+      </div>
+      <div class="panel">
+        <h3>🧠 Fixie's work: judge board</h3>
+        <div class="sub">Background agent with guardrails enforced in code</div>
+        <div class="saved"><span class="l">Saved vs. tech visit</span><span class="n" id="saved">$0</span></div>
+        <div class="meters">
+          <div class="meter">Calls <span class="val" id="mCallsV">0/8</span><div class="bar"><div class="fill" id="mCalls"></div></div></div>
+          <div class="meter">Minutes <span class="val" id="mMinV">0/20</span><div class="bar"><div class="fill" id="mMin"></div></div></div>
+          <div class="meter">Spend cap <span class="val" id="mBudV">$0/$40</span><div class="bar"><div class="fill" id="mBud"></div></div></div>
+        </div>
+        <div class="feed" id="board"></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Why this isn't "just ask Meta glasses or Grok"</h2>
+    <table>
+      <thead><tr><th></th><th>Diagnose</th><th>Calls distributors by part # + warranty line</th><th>Orders on spoken "yes"</th><th>Calls back when part arrives, coaches install</th><th>Works on a flip phone / landline</th></tr></thead>
+      <tbody>
+        <tr><td>Meta Ray-Ban / Meta AI</td><td class="y">✓</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">— ($299–799 glasses)</td></tr>
+        <tr><td>ChatGPT / Gemini Live / Grok</td><td class="y">✓</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="p">inbound only</td></tr>
+        <tr><td>Google "Ask for Me"</td><td class="n">—</td><td class="p">local shops, from Search</td><td class="n">—</td><td class="n">—</td><td class="n">—</td></tr>
+        <tr class="us"><td><strong>Fixie</strong></td><td class="y">✓</td><td class="y">✓ in parallel</td><td class="y">✓ capped</td><td class="y">✓ multi-day</td><td class="y">✓</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="grid2">
+    <div class="card">
+      <h2>Moat: things no LLM has</h2>
+      <ul>
+        <li><strong>Parts graph:</strong> model number → exact part → cross-refs → live price and stock, learned from every supplier call. The next lookup is instant.</li>
+        <li><strong>Confirmed fixes:</strong> which repair actually worked for this model with this symptom, verified on the follow-up call.</li>
+        <li><strong>Asset memory:</strong> it knows your appliances and calls first about recalls and failures.</li>
+        <li><strong>Buyer's agent:</strong> no commissions, no upsell. The opposite of a home-repair scam.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h2>One engine, two markets</h2>
+      <ul>
+        <li><strong>Consumer wedge:</strong> seniors and non-technical people. Home-warranty companies and insurers pay per resolved case.</li>
+        <li><strong>Ports and fleets:</strong> a fault code triggers sourcing before the berth window. Crane downtime costs an estimated $5k–50k+/hr.</li>
+        <li><strong>Defense facilities:</strong> base HVAC uses off-the-shelf parts, no ITAR. The Army created an HVAC task force on Oct 15, 2026.</li>
+        <li><strong>Multi-site facilities:</strong> restaurant equipment downtime costs a large operator about $18M/yr.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="grid2">
+    <div>
+      <h2>Thin vertical slices (each one is demoable)</h2>
+      <div class="slices">
+        <div class="slice"><span class="s">S0</span><div>Inbound call → diagnosis → <code>start_job</code> tool → board event<div class="d">Lane A · real phone call end-to-end</div></div><span class="t">→ 3:30</span></div>
+        <div class="slice"><span class="s">S1</span><div>Warranty call + parallel supplier calls, quotes ranked, guards on<div class="d">Lane A · teammates play the counters</div></div><span class="t">→ 4:15</span></div>
+        <div class="slice"><span class="s">S2</span><div>Callback, spoken "yes", mock order<div class="d">Lane A</div></div><span class="t">→ 4:45</span></div>
+        <div class="slice"><span class="s">S3</span><div>"Delivered" event → arrival call → voice install + fix check<div class="d">Lane A</div></div><span class="t">→ 5:10</span></div>
+        <div class="cut">CUT LINE · DEMO THIS IF TIME RUNS OUT</div>
+        <div class="slice after"><span class="s">S4</span><div>Port tractor J1939 fault → same engine<div class="d">Lane A · adds Dispatch track</div></div><span class="t">→ 5:30</span></div>
+        <div class="slice"><span class="s">∥</span><div>Judge board, role-play scripts, real part prices, pitch, backup video by 5:30, submit by 6:20<div class="d">Lane B · friend + their Claude thread</div></div><span class="t">all day</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Guardrails (said on stage)</h2>
+      <ul>
+        <li>Every call opens with "I'm an AI assistant; this call is recorded" (FCC 24-17, CA §632).</li>
+        <li>Safety tiers: DIY · DIY with caution · <strong>pro required</strong> (gas, refrigerant, high voltage).</li>
+        <li>Caps enforced in code: 8 calls, 20 minutes, $40, approved vendors only.</li>
+        <li>Voicemail, IVR loop, or 90s of silence → skip. Cap hit → stop and call the user.</li>
+        <li>Nothing is bought without a spoken yes. Full transcript audit log.</li>
+        <li>Honest pitch: <strong>compares quotes for the identical part</strong>, not "negotiates".</li>
+      </ul>
+    </div>
+  </section>
+</div>
+
+<script>
+const STAGES = ['Call','Diagnose','Warranty','Suppliers','Callback','Delivery','Install','Port fault'];
+// side: p = phone line, b = board event. who: agent|user|sys. cls: call|good|warn|bad|ent
+const S = [
+  {st:0, call:'Dorothy → Fixie', p:['sys','Dorothy dials 1-800-FIX-IE5 from her flip phone']},
+  {st:0, b:['call','call_started','Inbound: Dorothy, +1 619 ··· 0142'], calls:1},
+  {st:0, p:['agent',"Hi, I'm Fixie, an AI assistant. This call is recorded. What's giving you trouble?"]},
+  {st:0, p:['user',"My dryer runs but the clothes come out cold."]},
+  {st:1, p:['agent',"Let's figure it out. Is it electric or gas? And is there a sticker inside the door? Read me the model number."]},
+  {st:1, p:['user',"Electric. It says W-E-D-4-8-1-5-E-W."]},
+  {st:1, p:['agent',"W-E-D-4-8-1-5-E-W, a Whirlpool. Got it."]},
+  {st:1, b:['good','diagnosis','Whirlpool WED4815EW: blown thermal fuse (82%)']},
+  {st:1, b:['good','safety','DIY with caution: unplug first, clean the vent']},
+  {st:1, b:['','part_identified','WP3392519 (cross-ref 3392519)']},
+  {st:1, p:['agent',"Most likely a $10 thermal fuse. You can do this yourself once it's unplugged. I'll check your warranty, find the part, and call you back in a few minutes."]},
+  {st:1, call:'end', p:['sys','Call ends. Dorothy goes back to her tea.']},
+  {st:2, b:['call','call_started','Warranty lane → Whirlpool Parts & Warranty'], calls:2, min:3},
+  {st:2, b:['','transcript','"…unit purchased 2019, standard warranty expired."']},
+  {st:2, b:['warn','warranty','Not covered → sourcing the identical part']},
+  {st:3, b:['call','call_started','Parallel: Valley Appliance · PartsDirect · Coast Supply'], calls:5, min:6},
+  {st:3, b:['','quote','Valley Appliance: $18.40, in stock, pickup today']},
+  {st:3, b:['bad','guard','Coast Supply: voicemail detected → skipped (no retry loop)'], min:8},
+  {st:3, b:['','quote','PartsDirect: $9.10, ships Tuesday, identical part']},
+  {st:3, b:['good','best_deal','PartsDirect $9.10 vs ~$200 tech visit'], saved:191, bud:9.1},
+  {st:4, call:'Fixie → Dorothy', b:['call','call_started','Callback: Dorothy'], calls:6, min:9},
+  {st:4, p:['agent',"Good news, Dorothy. Your warranty's expired, but I found the exact part for $9.10. A repair visit is about $200. It arrives Tuesday. Should I order it?"]},
+  {st:4, p:['user',"Yes, please."]},
+  {st:4, b:['good','order_confirmed','$9.10 · PartsDirect · confirmed by voice']},
+  {st:4, call:'end', p:['sys','Call ends.']},
+  {st:5, b:['ent','delivered','UPS: package delivered (tracking webhook)']},
+  {st:5, call:'Fixie → Dorothy', b:['call','call_started','Delivery call: Dorothy'], calls:7, min:10},
+  {st:5, p:['sys','Tuesday, 2:14 PM. Her phone rings.']},
+  {st:5, p:['agent',"Hi Dorothy, it's Fixie. Your dryer part just arrived. Want to install it together? It takes about 15 minutes."]},
+  {st:5, p:['user',"Okay, let's do it."]},
+  {st:6, p:['agent',"First, unplug the dryer and pull it away from the wall. Tell me when it's done."]},
+  {st:6, b:['','install_step','1/7 Unplug and pull out the dryer']},
+  {st:6, p:['agent',"Now take out the two screws on the back panel, near the bottom."]},
+  {st:6, b:['','install_step','3/7 Remove the rear panel']},
+  {st:6, p:['agent',"See the small white oval piece with two wires? Swap it for the new one, same wires, same spots."]},
+  {st:6, b:['','install_step','5/7 Swap the thermal fuse']},
+  {st:6, p:['agent',"Panel back on, plug it in, and run it for a minute. Is it warm?"]},
+  {st:6, p:['user',"It's warm! Oh, thank you."]},
+  {st:6, b:['good','fix_verified','Dryer heating. Logged a confirmed fix for WED4815EW'], min:13},
+  {st:6, call:'end', p:['sys','Total cost: $9.10. No technician, no app, no screen.']},
+  {st:7, b:['ent','fault','Port of San Diego: terminal tractor YT-07, J1939 SPN 3226 FMI 4']},
+  {st:7, b:['ent','same engine','Tech radio call + 3 parts counters, before the 06:00 berth window']},
+  {st:7, b:['good','best_deal','NOx sensor: $312 local, pickup in 40 min. Tractor back before the ship docks']},
+];
+
+const $ = id => document.getElementById(id);
+let i = 0, timer = null, speed = 1, callSec = 0, callTick = null, inCall = false;
+let calls = 0, min = 0, bud = 0, saved = 0;
+
+const stagesEl = $('stages');
+STAGES.forEach((name, idx) => {
+  const el = document.createElement('span');
+  el.className = 'stage'; el.textContent = `${idx+1}. ${name}`;
+  el.onclick = () => jumpTo(idx);
+  stagesEl.appendChild(el);
+});
+
+function renderStages(cur) {
+  [...stagesEl.children].forEach((el, idx) => {
+    el.className = 'stage' + (idx < cur ? ' done' : '') + (idx === cur ? ' active' : '');
+  });
+}
+function add(feed, html, cls) {
+  const d = document.createElement('div'); d.className = cls; d.innerHTML = html;
+  feed.appendChild(d); feed.scrollTop = feed.scrollHeight;
+}
+function setCall(label) {
+  if (label === 'end') {
+    inCall = false; clearInterval(callTick);
+    $('callstate').innerHTML = '<span class="dot"></span>Call ended';
+    return;
+  }
+  inCall = true; callSec = 0; clearInterval(callTick);
+  $('callstate').innerHTML = `<span class="dot live"></span>${label}`;
+  callTick = setInterval(() => { callSec++; $('calltimer').textContent = `${String(Math.floor(callSec/60)).padStart(2,'0')}:${String(callSec%60).padStart(2,'0')}`; }, 1000 / speed);
+}
+function meters() {
+  $('mCalls').style.width = `${calls/8*100}%`; $('mCallsV').textContent = `${calls}/8`;
+  $('mMin').style.width = `${min/20*100}%`; $('mMinV').textContent = `${min}/20`;
+  $('mBud').style.width = `${bud/40*100}%`; $('mBudV').textContent = `$${bud.toFixed(2).replace('.00','')}/$40`;
+}
+function animateSaved(to) {
+  const from = saved; saved = to; const t0 = performance.now();
+  const step = now => { const k = Math.min(1, (now - t0) / 900); $('saved').textContent = `$${Math.round(from + (to - from) * k)}`; if (k < 1) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
+}
+function apply(s, instant) {
+  renderStages(s.st);
+  if (s.call) setCall(s.call);
+  if (s.p) { const [who, text] = s.p; add($('phone'), who === 'sys' ? text : `<b>${who === 'agent' ? 'Fixie' : 'Dorothy'}:</b> ${text}`, `line ${who}`); }
+  if (s.b) { const [cls, k, text] = s.b; add($('board'), `<span class="k">${k}</span>${text}`, `ev ${cls}`); }
+  if (s.calls != null) calls = s.calls;
+  if (s.min != null) min = s.min;
+  if (s.bud != null) bud = s.bud;
+  meters();
+  if (s.saved != null) { if (instant) { saved = s.saved; $('saved').textContent = `$${s.saved}`; } else animateSaved(s.saved); }
+}
+function delayFor(s) {
+  const text = (s.p && s.p[1]) || (s.b && s.b[2]) || '';
+  return Math.max(700, Math.min(2600, text.length * 28)) / speed;
+}
+function tick() {
+  if (i >= S.length) { stop(); $('play').textContent = '▶ Replay'; return; }
+  const s = S[i++]; apply(s);
+  timer = setTimeout(tick, delayFor(s));
+}
+function play() { if (i >= S.length) reset(); $('play').textContent = '❚❚ Pause'; tick(); }
+function stop() { clearTimeout(timer); timer = null; $('play').textContent = '▶ Play demo'; }
+function reset() {
+  stop(); i = 0; calls = min = bud = saved = 0; inCall = false; clearInterval(callTick);
+  $('phone').innerHTML = ''; $('board').innerHTML = ''; $('saved').textContent = '$0';
+  $('callstate').innerHTML = '<span class="dot"></span>Idle'; $('calltimer').textContent = '00:00';
+  meters(); renderStages(-1);
+}
+function jumpTo(stageIdx) {
+  reset();
+  while (i < S.length && S[i].st < stageIdx) apply(S[i++], true);
+  play();
+}
+$('play').onclick = () => timer ? stop() : play();
+$('restart').onclick = () => { reset(); play(); };
+$('speed').onclick = () => { speed = speed === 1 ? 2 : speed === 2 ? 4 : 1; $('speed').textContent = `Speed ${speed}×`; };
+reset();
+// Pre-fill the first stages so the static view isn't empty
+while (i < 12) apply(S[i++], true);
+$('play').textContent = '▶ Continue demo';
+</script>
+</body>
+</html>

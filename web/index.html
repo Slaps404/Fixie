@@ -1,0 +1,1090 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fixie · Operator audit view</title>
+<style>
+  /* Dark default for a dim demo room; ?theme=light (or press T) for a bright one. */
+  :root {
+    color-scheme: dark;
+    --surface-0: #111110; --surface-1: #1a1a19; --surface-2: #252523; --border: #363531;
+    --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e85;
+    --series-1: #3987e5;  /* agent / bars */
+    --series-2: #d95926;  /* caller */
+    --series-3: #199e70;  /* supplier / cheapest */
+    --sim: #9085e9;       /* SIMULATED badge: violet, never a status color */
+    --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --surface-0: #f3f3f1; --surface-1: #fcfcfb; --surface-2: #efeeea; --border: #dddcd6;
+    --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #77766f;
+    --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --sim: #6250d6;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--surface-0); color: var(--text-primary);
+    font-family: Inter, "SF Pro Display", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: clamp(14px, 1.05vw, 22px);
+    display: grid; grid-template-rows: auto auto auto auto 1fr; overflow: hidden;
+  }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* ---------- Header ---------- */
+  header { display: flex; align-items: center; gap: 0.9em; padding: 0.55em 1.3em; border-bottom: 1px solid var(--border); }
+  .brand { font-size: 2em; font-weight: 800; letter-spacing: -0.02em; }
+  .audit { display: flex; flex-direction: column; line-height: 1.15; }
+  .audit b { font-size: 1.15em; letter-spacing: 0.16em; font-weight: 800; }
+  .audit span { color: var(--text-secondary); font-size: 0.85em; }
+  .spacer { flex: 1; }
+  .pill { display: inline-flex; align-items: center; gap: 0.45em; padding: 0.3em 0.8em; border-radius: 999px;
+          background: var(--surface-2); font-weight: 700; font-size: 0.9em; white-space: nowrap; }
+  .dot { width: 0.65em; height: 0.65em; border-radius: 50%; background: var(--text-muted); flex: none; display: inline-block; }
+  .pill.live .dot, .dot.live { background: var(--good); animation: pulse 1.3s infinite; }
+  .pill.mock .dot { background: var(--warning); }
+  .pill.down .dot { background: var(--critical); }
+  @keyframes pulse { 50% { opacity: 0.3; } }
+  #statePill { letter-spacing: .06em; }
+  #statePill.bad { background: var(--critical); color: #fff; }
+  #statePill.done { background: var(--good); color: #fff; }
+  .clock { font-size: 1.5em; font-weight: 700; min-width: 3.2em; text-align: right; }
+  #jobs { display: flex; gap: 0.4em; }
+  .job { border: 1px solid var(--border); background: transparent; color: var(--text-secondary); font: inherit;
+         border-radius: 8px; padding: 0.25em 0.7em; cursor: pointer; font-size: 0.85em; font-weight: 600; }
+  .job.on { background: var(--surface-2); color: var(--text-primary); border-color: var(--series-1); }
+  .sim { display: inline-block; font-size: 0.66em; font-weight: 800; letter-spacing: .08em; padding: 0.12em 0.45em; border-radius: 5px;
+         background: var(--sim); color: #fff; vertical-align: 0.15em; margin-left: 0.4em; white-space: nowrap; }
+  header .sim { font-size: 0.8em; padding: 0.35em 0.75em; border-radius: 999px; margin: 0; }
+
+  /* ---------- Stage tracker + reason ticker ---------- */
+  .stages { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 0.45em; padding: 0.6em 1.3em 0.5em; }
+  .stage { padding: 0.4em 0.3em; border-radius: 10px; text-align: center; background: var(--surface-1);
+           color: var(--text-muted); font-weight: 700; border: 2px solid transparent; transition: all .4s; white-space: nowrap; }
+  .stage .n { display: block; font-size: 0.72em; font-weight: 600; opacity: .85; }
+  .stage.done { color: var(--text-primary); background: var(--surface-2); }
+  .stage.done .n::after { content: " ✓"; }
+  .stage.current { color: var(--text-primary); border-color: var(--series-1); background: var(--surface-2); }
+  #ticker { margin: 0 1.3em 0.7em; padding: 0.45em 0.9em; border-radius: 12px; display: flex; align-items: center; gap: 0.7em;
+            background: var(--surface-1); border: 1px solid var(--border); min-height: 2.6em; overflow: hidden; }
+  #ticker .tk { font-size: 0.75em; font-weight: 800; letter-spacing: .12em; color: var(--text-secondary); white-space: nowrap; }
+  #ticker .tx { font-size: 1.35em; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+  #ticker .cnt { color: var(--text-secondary); font-weight: 700; white-space: nowrap; }
+  #ticker.tripped { background: color-mix(in srgb, var(--warning) 16%, var(--surface-1)); border-color: var(--warning); }
+  #ticker.stopped { background: color-mix(in srgb, var(--critical) 18%, var(--surface-1)); border-color: var(--critical); }
+  #ticker.flash { animation: flash 1.2s ease-out; }
+  @keyframes flash { 0% { transform: scale(1.015); box-shadow: 0 0 0 6px color-mix(in srgb, var(--warning) 45%, transparent); } }
+
+  /* ---------- Layout ---------- */
+  main { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: 1em; padding: 0 1.3em 1.1em; min-height: 0; }
+  .col { display: flex; flex-direction: column; gap: 0.9em; min-height: 0; }
+  .col > .card { flex-shrink: 0; }
+  .col > .card.grow { flex: 1 1 0; min-height: 7em; overflow: auto; }
+  .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 16px; padding: 0.85em 1.1em; min-height: 0; }
+  .card h2 { margin: 0 0 0.5em; font-size: 0.8em; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-secondary); font-weight: 700; }
+  .empty { color: var(--text-muted); text-align: center; margin: auto; line-height: 1.6; }
+
+  /* Banners: fault + install */
+  .banner { display: none; }
+  .banner.show { display: block; animation: slidein .4s ease-out; }
+  #faultBanner { border: 2px solid var(--serious); }
+  #faultBanner .k { color: var(--serious); font-weight: 800; letter-spacing: .12em; font-size: 0.8em; }
+  #faultBanner .big { font-size: 1.5em; font-weight: 800; margin: 0.12em 0; }
+  #faultBanner .sub { color: var(--text-secondary); }
+  #install .stepbig { font-size: 1.5em; font-weight: 800; line-height: 1.2; margin: 0.2em 0 0.4em; }
+  #install .prog { height: 0.6em; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+  #install .prog > div { height: 100%; background: var(--series-1); border-radius: 0 4px 4px 0; transition: width .6s; }
+  #install .meta { display: flex; justify-content: space-between; align-items: center; gap: 1em; color: var(--text-secondary); margin-bottom: 0.3em; font-weight: 600; }
+  #install.verified { border: 2px solid var(--good); }
+  #install .ok { font-size: 1.7em; font-weight: 800; }
+  .acks { display: flex; gap: 0.4em; flex-wrap: wrap; }
+  .ack { padding: 0.15em 0.6em; border-radius: 7px; font-weight: 800; font-size: 0.85em; background: var(--surface-2); color: var(--text-muted); white-space: nowrap; }
+  .ack.on { background: var(--good); color: #fff; }
+
+  /* Call lanes */
+  .lanes-card { display: flex; flex-direction: column; overflow: hidden; }
+  #lanes { flex: 1; display: grid; grid-template-columns: repeat(auto-fit, minmax(14em, 1fr)); grid-auto-rows: minmax(0, 1fr); gap: 0.7em; min-height: 0; }
+  .lane { background: var(--surface-2); border-radius: 12px; padding: 0.65em 0.85em; display: flex; flex-direction: column; min-height: 0;
+          border-top: 5px solid var(--text-muted); animation: slidein .35s ease-out; }
+  .lane.active { border-top-color: var(--series-1); }
+  .lane.ended { opacity: .62; }
+  .lane .lh { display: flex; align-items: center; gap: 0.5em; margin-bottom: 0.4em; }
+  .lane .ico { font-size: 1.35em; }
+  .lane .party { font-weight: 800; font-size: 1.1em; line-height: 1.15; }
+  .lane .role { color: var(--text-muted); font-size: 0.76em; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+  .lane .st { margin-left: auto; text-align: right; font-weight: 700; font-size: 0.85em; white-space: nowrap; }
+  .lane .tx { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 0.35em; min-height: 0; }
+  .line { line-height: 1.3; animation: slidein .3s ease-out; }
+  .line .who { font-size: 0.7em; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; padding: 0.08em 0.45em;
+               border-radius: 5px; margin-right: 0.4em; color: #fff; vertical-align: 0.12em; }
+  .who.agent { background: var(--series-1); }
+  .who.user { background: var(--series-2); }
+  .who.supplier { background: var(--series-3); }
+  @keyframes slidein { from { opacity: 0; transform: translateY(10px); } }
+  #doneCalls { display: flex; flex-wrap: wrap; gap: 0.4em; margin-top: 0.6em; }
+  .chip { background: var(--surface-2); border-radius: 8px; padding: 0.25em 0.6em; font-size: 0.85em; color: var(--text-secondary); white-space: nowrap; }
+  .chip b { color: var(--text-primary); }
+  .chip.bad { box-shadow: inset 4px 0 0 var(--warning); }
+
+  /* Proof strip: always visible */
+  #strip { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0.5em; margin: 0 1.3em 0.5em; }
+  .st-cell { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 0.3em 0.7em; min-width: 0; }
+  .st-cell .l { font-size: 0.68em; font-weight: 800; letter-spacing: .1em; color: var(--text-muted); text-transform: uppercase; white-space: nowrap; }
+  .st-cell .v { font-size: 1.2em; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .st-cell .v small { font-size: 0.66em; color: var(--text-muted); font-weight: 600; }
+  .st-cell .trk { height: 0.3em; background: var(--surface-2); border-radius: 3px; overflow: hidden; margin-top: 0.15em; }
+  .st-cell .trk > div { height: 100%; background: var(--series-1); transition: width .6s; }
+  .st-cell.hot .trk > div { background: var(--warning); }
+  .st-cell.over .trk > div { background: var(--critical); }
+  .st-cell.alert { border-color: var(--warning); }
+
+  /* Live diagnosis: probability bars */
+  #diag .head { display: flex; justify-content: space-between; align-items: baseline; gap: 1em; }
+  #diag .probs { display: grid; grid-template-columns: minmax(8em, auto) 1fr 3.4em; gap: 0.3em 0.7em; align-items: center; margin-top: 0.2em; }
+  #diag .pn { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #diag .pn.top { color: var(--text-primary); }
+  #diag .pn:not(.top) { color: var(--text-secondary); }
+  #diag .pt { position: relative; height: 1.05em; background: var(--surface-2); border-radius: 0 5px 5px 0; }
+  #diag .pb { position: absolute; left: 0; top: 0; bottom: 0; background: var(--series-1); border-radius: 0 5px 5px 0; transition: width 1s cubic-bezier(.2,.8,.2,1); }
+  #diag .pb.top { background: var(--series-3); }
+  #diag .pg { position: absolute; top: -0.15em; bottom: -0.15em; width: 2px; background: var(--text-muted); transition: left 1s; }
+  #diag .pv { font-weight: 800; text-align: right; }
+  #diag .reason { margin-top: 0.5em; font-size: 1.2em; font-weight: 800; }
+  #diag .meta2 { color: var(--text-secondary); font-size: 0.82em; margin-top: 0.25em; display: flex; gap: 1em; flex-wrap: wrap; }
+  #diag .tests { display: flex; gap: 0.35em; flex-wrap: wrap; }
+  #diag.compact .probs, #diag.compact .meta2 { display: none; }
+  #diag.compact .reason { font-size: 1em; margin-top: 0.2em; }
+  #diag.unknown .reason { color: var(--warning); }
+
+  /* Decision log: agent proposes, code approves */
+  .dlog-card { flex-shrink: 0; height: 12.5em; display: flex; flex-direction: column; }
+  #dlog { overflow-y: auto; display: flex; flex-direction: column; gap: 0.2em; }
+  .dr { display: grid; grid-template-columns: 3.2em minmax(0, 1.35fr) 1.4em 6.4em minmax(0, 1.5fr); gap: 0.5em; align-items: baseline; line-height: 1.3; padding: 0.1em 0; }
+  .dr.new { animation: slidein .35s ease-out; }
+  .dr .t { color: var(--text-muted); font-size: 0.82em; }
+  .dr .pr, .dr .rule { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dr .pr { font-weight: 700; }
+  .dr .rule { color: var(--text-secondary); font-size: 0.9em; }
+  .dr.no .pr { color: var(--warning); }
+  .dr.state .pr, .dr.state .rule { color: var(--text-muted); font-weight: 500; }
+  .who2 { font-size: 0.66em; font-weight: 800; letter-spacing: .06em; padding: 0.1em 0.4em; border-radius: 5px; text-align: center; white-space: nowrap; overflow: hidden; }
+  .who2.code { background: var(--surface-2); color: var(--text-primary); border: 1px solid var(--border); }
+  .who2.voice { background: var(--series-2); color: #fff; }
+  .who2.care { background: var(--sim); color: #fff; }
+
+  /* Bottom row: agent log + guard meters */
+  .bottomrow { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 0.9em; flex-shrink: 0; height: 11em; }
+  .bottomrow > .card { min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+  #log { overflow: hidden; display: flex; flex-direction: column; gap: 0.25em; }
+  .lg { display: grid; grid-template-columns: 3.4em 1.5em 1fr; gap: 0.4em; line-height: 1.3; animation: slidein .3s ease-out; }
+  .lg .t { color: var(--text-muted); font-size: 0.85em; }
+  .lg .x { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lg.warn .x { color: var(--warning); font-weight: 700; }
+  .lg.err .x { color: var(--critical); font-weight: 700; }
+
+  .meters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.55em 1em; }
+  .meter .ml { font-weight: 700; font-size: 0.82em; color: var(--text-secondary); }
+  .meter .mv { font-weight: 800; font-size: 1.15em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .meter .mv small { color: var(--text-muted); font-weight: 600; font-size: 0.72em; }
+  .meter .trk { height: 0.5em; background: var(--surface-2); border-radius: 4px; overflow: hidden; margin-top: 0.15em; }
+  .meter .trk > div { height: 100%; background: var(--series-1); border-radius: 0 4px 4px 0; transition: width .6s; }
+  .meter.hot .trk > div { background: var(--warning); }
+  .meter.over .trk > div { background: var(--critical); }
+  .armed-line { color: var(--text-secondary); font-size: 0.8em; margin-top: 0.55em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* Right column */
+  .hero { display: grid; grid-template-columns: 1.25fr 1fr; gap: 0.4em 1.2em; }
+  .hero .label { font-size: 0.75em; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-secondary); font-weight: 700; }
+  .hero .amount { font-weight: 800; letter-spacing: -0.03em; line-height: 1; margin: 0.08em 0 0.12em; white-space: nowrap; }
+  .hero .a1 { font-size: clamp(46px, 4.7vw, 104px); }
+  .hero .a2 { font-size: clamp(32px, 3.1vw, 68px); }
+  .hero .amount .cur { font-size: 0.55em; vertical-align: 0.6em; margin-right: 0.04em; color: var(--text-secondary); }
+  .hero .amount.muted { color: var(--text-muted); }
+  .hero .sub { color: var(--text-secondary); line-height: 1.3; font-size: 0.88em; }
+  .hero .sub b { color: var(--text-primary); }
+  .hero.final { box-shadow: 0 0 0 3px var(--good) inset; }
+
+  .facts { display: grid; grid-template-columns: auto 1fr; gap: 0.28em 0.8em; align-items: baseline; }
+  .facts .k { color: var(--text-muted); font-size: 0.78em; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+  .facts .v { font-weight: 700; }
+  .facts .v small { color: var(--text-secondary); font-weight: 500; }
+  .badge { display: inline-flex; align-items: center; gap: 0.3em; padding: 0.1em 0.55em; border-radius: 7px; font-weight: 800; font-size: 0.88em; color: #111; }
+  .badge.good { background: var(--good); color: #fff; }
+  .badge.warn { background: var(--warning); }
+  .badge.serious { background: var(--serious); }
+  .badge.none { background: var(--surface-2); color: var(--text-muted); }
+
+  table.quotes { width: 100%; border-collapse: collapse; }
+  .quotes th { text-align: left; font-size: 0.7em; letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); font-weight: 700; padding: 0 0.4em 0.3em; }
+  .quotes td { padding: 0.38em 0.4em; border-top: 1px solid var(--border); vertical-align: middle; }
+  .quotes td.price { font-weight: 800; font-size: 1.22em; text-align: right; white-space: nowrap; }
+  .quotes td.price small { display: block; font-size: 0.6em; font-weight: 600; color: var(--text-muted); }
+  .quotes td.barc { width: 22%; }
+  .quotes .bar { height: 0.8em; background: var(--series-1); border-radius: 0 4px 4px 0; transition: width .8s cubic-bezier(.2,.8,.2,1); }
+  .quotes tr.best td { background: color-mix(in srgb, var(--series-3) 16%, transparent); }
+  .quotes tr.best .bar { background: var(--series-3); }
+  .quotes tr.best td:first-child { box-shadow: inset 5px 0 0 var(--series-3); }
+  .quotes tr.rej td { background: color-mix(in srgb, var(--critical) 11%, transparent); }
+  .quotes tr.rej td:first-child { box-shadow: inset 5px 0 0 var(--critical); }
+  .quotes tr.rej .bar { background: var(--critical); opacity: .6; }
+  .quotes tr.rej td.price, .quotes tr.rej .sname { text-decoration: line-through; text-decoration-thickness: 2px; text-decoration-color: var(--critical); }
+  .quotes .tag { font-size: 0.66em; font-weight: 800; letter-spacing: .08em; color: #fff; padding: 0.1em 0.45em; border-radius: 5px; margin-left: 0.4em; vertical-align: 0.15em; }
+  .quotes .tag.best { background: var(--series-3); }
+  .quotes .tag.rej { background: var(--critical); }
+  .quotes .sm { color: var(--text-secondary); font-size: 0.82em; }
+  .quotes .why { color: var(--critical); font-size: 0.8em; font-weight: 700; }
+  tr.newrow td { animation: slidein .4s ease-out; }
+
+  #toast { position: fixed; left: 50%; bottom: 1.2em; transform: translateX(-50%); background: var(--surface-2); border: 1px solid var(--border);
+           padding: 0.6em 1.1em; border-radius: 10px; color: var(--text-secondary); opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 9; }
+  #toast.show { opacity: 1; }
+  #drop { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; font-size: 2em; font-weight: 800;
+          background: color-mix(in srgb, var(--surface-0) 85%, transparent); border: 4px dashed var(--series-1); z-index: 8; }
+  #drop.show { display: flex; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">Fixie</div>
+  <div class="audit"><b>OPERATOR AUDIT VIEW</b><span>For judges only. The caller never sees a screen.</span></div>
+  <div class="spacer"></div>
+  <div id="jobs"></div>
+  <span class="sim" id="simPill" style="display:none">SIMULATED</span>
+  <div class="pill" id="statePill" style="display:none"></div>
+  <div class="pill" id="conn"><span class="dot"></span><span id="connText">Connecting…</span></div>
+  <div class="clock num" id="clock" title="Job elapsed time">0:00</div>
+</header>
+
+<div class="stages" id="stages"></div>
+<div id="strip">
+  <div class="st-cell" id="sCalls"><div class="l">Sourcing calls</div><div class="v num">0</div><div class="trk"><div></div></div></div>
+  <div class="st-cell" id="sMin"><div class="l">Minutes</div><div class="v num">0</div><div class="trk"><div></div></div></div>
+  <div class="st-cell" id="sPar"><div class="l">Parallel vs serial</div><div class="v num">—</div></div>
+  <div class="st-cell" id="sBudget"><div class="l">$ committed / cap</div><div class="v num">$0</div><div class="trk"><div></div></div></div>
+  <div class="st-cell" id="sGuards"><div class="l">Guards fired</div><div class="v num">0</div></div>
+  <div class="st-cell" id="sSpend"><div class="l">Fixie's own spend</div><div class="v num">$0</div><div class="trk"><div></div></div></div>
+</div>
+<div id="ticker"><span class="tk">GUARDRAILS</span><span class="tx" id="tickerText">Armed: call cap · minute cap · $ budget · vendor allow-list · loop / stuck / no-answer · “order it” before any $</span><span class="cnt" id="tickerCount"></span></div>
+
+<main>
+  <div class="col">
+    <section class="card banner" id="faultBanner"></section>
+    <section class="card banner" id="install"></section>
+    <section class="card banner" id="diag" title="Click to expand/collapse"></section>
+    <section class="card lanes-card grow">
+      <h2>Calls <span id="callCount" style="color:var(--text-muted)"></span></h2>
+      <div id="lanes"></div>
+      <div id="doneCalls"></div>
+    </section>
+    <section class="card dlog-card">
+      <h2>Decision log · the agent proposes, code (or Dorothy's voice) approves</h2>
+      <div id="dlog"></div>
+    </section>
+  </div>
+
+  <div class="col">
+    <section class="card hero" id="hero">
+      <div>
+        <div class="label">Saved vs. tech visit</div>
+        <div class="amount a1 num muted" id="saved1"><span class="cur">$</span>0</div>
+        <div class="sub" id="sub1">Waiting for quotes…</div>
+      </div>
+      <div>
+        <div class="label">Saved vs. next-best quote</div>
+        <div class="amount a2 num muted" id="saved2"><span class="cur">$</span>0</div>
+        <div class="sub" id="sub2">Same part number, landed price</div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Diagnosis</h2>
+      <div class="facts">
+        <div class="k">Device</div><div class="v" id="fDevice">—</div>
+        <div class="k">Issue</div><div class="v" id="fIssue">—</div>
+        <div class="k">Part</div><div class="v" id="fPart">—</div>
+        <div class="k">Safety</div><div class="v"><span class="badge none" id="fSafety">pending</span> <small id="fSafetyWhy"></small></div>
+        <div class="k">Warranty</div><div class="v"><span class="badge none" id="fWarranty">not checked</span> <small id="fWarrantyWhy"></small></div>
+        <div class="k">Consent</div><div class="v" id="fConsent"><small>—</small></div>
+        <div class="k" id="kRecall" style="display:none">Recall</div><div class="v" id="fRecall" style="display:none"></div>
+        <div class="k" id="kCam" style="display:none">Camera</div><div class="v" id="fCam" style="display:none"></div>
+      </div>
+    </section>
+
+    <section class="card grow">
+      <h2>Quotes: identical part, ranked by landed price</h2>
+      <table class="quotes"><thead><tr><th>Supplier</th><th style="text-align:right">Landed</th><th></th><th>Arrives</th></tr></thead>
+        <tbody id="quotes"></tbody></table>
+    </section>
+  </div>
+</main>
+<div id="toast"></div>
+<div id="drop">Drop events.jsonl to replay</div>
+
+<script>
+(() => {
+  // ---------- Config (query string overrides) ----------
+  const P = new URLSearchParams(location.search);
+  const SERVER = (P.get('server') || 'http://localhost:3000').replace(/\/$/, '');
+  const MOCK = P.has('mock') && P.get('mock') !== '0';
+  const REPLAY = P.has('replay') ? (P.get('replay') && P.get('replay') !== '1' ? P.get('replay') : null) : undefined;
+  const SPEED = Math.max(0.1, parseFloat(P.get('speed') || '1'));
+  const MAX_GAP_MS = parseFloat(P.get('maxGap') || '3000');  // playback: compress long pauses
+  const MANUAL_DELIVERY = P.has('manual');                   // playback: wait for D instead of auto-resuming
+  // Fallback caps; live `metrics` events override calls/minutes/spend. Budget caps match SPEC §5.
+  const CAPS = { calls: +P.get('maxCalls') || 8, minutes: +P.get('maxMinutes') || 20, spend: +P.get('spendCap') || 3,
+                 budget: +P.get('budget') || 40, techBudget: +P.get('techBudget') || 1500 };
+  if (P.get('theme') === 'light') document.documentElement.dataset.theme = 'light';
+
+  const TYPES = ['call_started','transcript','call_ended','diagnosis','safety','part_identified','parts_cache','warranty','quote',
+                 'best_deal','guard','order_confirmed','order_declined','delivered','install_step','fix_verified','fault',
+                 'job_state','consent','safety_ack','metrics','error','note',
+                 'diagnosis_update','recall_check','vision_session','vision_capture','vision_rank','vision_extract'];
+  // Pre-job (intake-phase) events that belong with the intake call until start_job creates the job.
+  const INTAKE_TYPES = ['transcript', 'diagnosis_update', 'recall_check', 'vision_session', 'vision_capture', 'vision_rank', 'vision_extract'];
+  const HYP_NAMES = { thermal_fuse: 'Thermal fuse', heating_element: 'Heating element', thermostat: 'High-limit thermostat',
+                      timer_control: 'Timer / control', power_one_leg: 'Power (one 240V leg)' };
+  const hypName = id => HYP_NAMES[id] || String(id).replace(/_/g, ' ').replace(/^./, c => c.toUpperCase());
+  const DECISION_TYPES = ['quote', 'best_deal', 'guard', 'order_confirmed', 'order_declined', 'job_state'];
+  const CONSUMER_STAGES = [
+    ['Intake', ['NEW'], ['consent']], ['Diagnosed', ['DIAGNOSED'], ['diagnosis','safety','part_identified']],
+    ['Sourcing', ['SOURCING'], ['warranty','quote']], ['“Order it”?', ['AWAITING_CONFIRMATION','DECLINED'], ['best_deal']],
+    ['Ordered', ['ORDERED'], ['order_confirmed']], ['Delivered', ['DELIVERED'], ['delivered']],
+    ['Install', ['INSTALLING'], ['install_step','safety_ack']], ['Fixed', ['FIXED'], ['fix_verified']],
+  ];
+  const FAULT_STAGES = [
+    ['Fault', ['NEW'], ['fault']], ['Diagnosed', ['DIAGNOSED'], ['diagnosis','part_identified','safety']],
+    ['Sourcing', ['SOURCING'], ['quote','best_deal']], ['Tech notified', ['NOTIFIED'], []],
+  ];
+  const TERMINAL_BAD = ['DECLINED', 'ESCALATED', 'STOPPED'];
+  const LANE = {
+    user: { ico: '👵', role: 'Caller' }, warranty: { ico: '🏷️', role: 'Warranty line' }, supplier: { ico: '🏪', role: 'Supplier' },
+    delivery: { ico: '📦', role: 'Delivery call' }, tech: { ico: '🔧', role: 'Field tech' },
+  };
+  const GUARD_NAMES = { budget: 'Budget', max_calls: 'Call cap', minutes: 'Minute cap', loop: 'Loop', stuck: 'Stuck',
+                        voicemail: 'Voicemail', no_answer: 'No answer', vendor_not_approved: 'Unapproved vendor',
+                        safety: 'Safety gate', manual: 'Kill switch', quote: 'Quote rejected', not_identical: 'Not identical' };
+  const ENDED = { completed: '✓ done', voicemail: '📭 voicemail', no_answer: '✗ no answer', timeout: '⏱ timeout', error: '⚠ error' };
+
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const money = n => { n = Number(n); return '$' + (Number.isInteger(n) ? n.toLocaleString() : n.toFixed(2)); };
+  const SIM = '<span class="sim">SIMULATED</span>';
+  const simTag = (j, flag) => (flag && j.hasLive ? SIM : '');  // all-sim jobs say it once, in the header
+  // Jobs can span days (order Saturday, install Tuesday), so the clock widens as needed.
+  const fmtT = ms => {
+    const s = Math.max(0, Math.round(ms / 1000)), pad = n => String(n).padStart(2, '0');
+    if (s >= 86400) return `${Math.floor(s / 86400)}d ${Math.floor(s % 86400 / 3600)}h`;
+    if (s >= 3600) return `${Math.floor(s / 3600)}:${pad(Math.floor(s % 3600 / 60))}:${pad(s % 60)}`;
+    return `${Math.floor(s / 60)}:${pad(s % 60)}`;
+  };
+  const landed = q => q.landedTotal != null ? +q.landedTotal : +q.price + (+q.shipping || 0);
+  const isRejected = q => !!(q.rejected || q.rejectedReason);
+
+  // ---------- State: one record per jobId; the board shows the focused job ----------
+  // Intake transcripts arrive with jobId=null until start_job creates the job; they wait in a 'pending' job keyed by callId.
+  const PENDING = '__pending';
+  let jobs, order, focus, seen, pinned, lastSeq;
+  const newJob = id => ({ id, t0: null, lastTs: null, lastPerf: null, kind: 'consumer', stage: -1, state: null, calls: new Map(), callOrder: [],
+                          quotes: new Map(), best: null, metrics: null, guards: [], log: [], facts: {}, warranty: null, consent: null,
+                          ordered: null, delivered: null, steps: [], acks: new Set(), verified: null, fault: null, partyName: null,
+                          shown1: 0, shown2: 0, sim: false, diag: null, decisions: [], vision: null, recall: null, diagOpen: null });
+  function resetAll() { jobs = new Map(); order = []; focus = null; pinned = false; seen = new Set(); lastSeq = 0; renderAll(); }
+  const J = () => jobs.get(focus) || newJob('—');
+
+  // ---------- Intake ----------
+  function normalize(raw) {
+    let o = raw;
+    if (typeof raw === 'string') { try { o = JSON.parse(raw); } catch { return null; } }
+    if (!o || typeof o !== 'object' || !o.type) return null;
+    return { id: o.id, ts: o.ts || new Date().toISOString(), jobId: o.jobId ?? null, type: o.type, data: o.data || {}, simulated: !!(o.simulated || o.data?.simulated) };
+  }
+
+  function jobFor(id) {
+    let job = jobs.get(id);
+    if (!job) {
+      job = newJob(id); jobs.set(id, job);
+      if (id !== PENDING) order.push(id);
+      if (!pinned || focus === PENDING || !focus) focus = id; // follow the newest job unless the presenter picked one
+    }
+    return job;
+  }
+
+  function handle(ev) {
+    if (!ev || !TYPES.includes(ev.type)) return;
+    const key = ev.id != null ? `${ev.id}|${ev.ts}` : `${ev.jobId}|${ev.ts}|${ev.type}|${JSON.stringify(ev.data)}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    if (ev.id != null) lastSeq = Math.max(lastSeq, ev.id);
+    // Job-less events: intake transcripts wait in PENDING; server-wide notes go to the focused job's log.
+    let jid = ev.jobId;
+    if (!jid) jid = (ev.data.callId || INTAKE_TYPES.includes(ev.type)) ? PENDING : (focus && focus !== PENDING ? focus : order[order.length - 1] || PENDING);
+    const job = jobFor(jid);
+    adoptPending(job, ev);
+    const ts = Date.parse(ev.ts) || Date.now();
+    if (job.t0 === null) job.t0 = ts;
+    job.lastTs = Math.max(job.lastTs || ts, ts); job.lastPerf = performance.now();
+    if (ev.simulated) job.sim = true;
+    else if (['call_started', 'transcript', 'quote', 'warranty'].includes(ev.type)) job.hasLive = true;
+    apply(job, ev, ts);
+    if (job.id === focus) renderAll(ev); else renderJobs();
+  }
+
+  // When a real job first mentions a callId we've been holding in PENDING, move that call (and its timing) over.
+  function adoptPending(job, ev) {
+    const pend = jobs.get(PENDING), cid = ev.data.callId;
+    if (job.id === PENDING || !pend) return;
+    const claimAll = ['consent', 'diagnosis', 'part_identified'].includes(ev.type);
+    const ids = cid && pend.calls.has(cid) ? [cid] : claimAll ? [...pend.callOrder] : [];
+    if (claimAll || ids.length) {
+      ['diag', 'vision', 'recall'].forEach(k => { if (pend[k] && !job[k]) { job[k] = pend[k]; pend[k] = null; } });
+      if (pend.decisions.length) { job.decisions.unshift(...pend.decisions); pend.decisions = []; }
+    }
+    ids.forEach(id => {
+      const c = pend.calls.get(id); if (!c) return;
+      job.calls.set(id, c); job.callOrder.unshift(id); pend.calls.delete(id); pend.callOrder = pend.callOrder.filter(x => x !== id);
+      job.t0 = Math.min(job.t0 ?? c.start, c.start);
+      if (pend.sim) job.sim = true;
+    });
+    if (!pend.calls.size && !pend.diag && !pend.vision) { jobs.delete(PENDING); if (focus === PENDING) focus = job.id; }
+  }
+
+  function advance(job, ev) {
+    const stages = job.kind === 'enterprise' ? FAULT_STAGES : CONSUMER_STAGES;
+    stages.forEach(([, states, types], i) => {
+      const hit = ev.type === 'job_state' ? states.includes(ev.data.to) : types.includes(ev.type);
+      if (hit && i > job.stage) job.stage = i;
+    });
+  }
+
+  function logIt(job, ts, ico, text, cls, sim) { job.log.push({ rel: ts - job.t0, ico, text, cls, sim }); }
+
+  function getCall(job, callId, ts, lane) {
+    const id = callId || job.callOrder[job.callOrder.length - 1] || 'call';
+    if (!job.calls.has(id)) {
+      job.calls.set(id, { id, lane: lane || 'user', party: !lane || lane === 'user' ? 'Incoming call' : 'Call', lines: [], start: ts, end: null, reason: null, sim: false });
+      job.callOrder.push(id);
+    }
+    return job.calls.get(id);
+  }
+
+  // "Agent proposes, code approves": one row per decision event.
+  const GUARD_PROPOSAL = { budget: 'Accept quote', quote: 'Accept quote', not_identical: 'Accept quote', no_answer: 'Wait on unanswered call',
+    voicemail: 'Leave a voicemail', stuck: 'Keep holding the line', max_calls: 'Place another call', minutes: 'Keep calling',
+    loop: 'Redial the same vendor', vendor_not_approved: 'Call an unlisted vendor', manual: 'Keep running', safety: 'Advance install step' };
+  function decision(job, ev, ts) {
+    const d = ev.data, t = ev.type;
+    const by = d.approvedBy || (t === 'order_confirmed' || t === 'order_declined' ? 'user_voice' : 'code');
+    let pr, ok = true;
+    if (t === 'quote') {
+      pr = `${d.supplier}: ${money(landed(d))} landed`; ok = !isRejected(d);
+      // The server emits guard → quote for a rejected quote; show it once, as the quote.
+      const last = job.decisions[job.decisions.length - 1];
+      if (!ok && last && last.kind === 'guard' && last.callId && last.callId === d.callId) job.decisions.pop();
+    }
+    else if (t === 'best_deal') pr = `Pick ${d.supplier} at ${money(landed(d))}`;
+    else if (t === 'guard') { pr = `${GUARD_PROPOSAL[d.kind] || d.kind}${d.vendorId ? ` (${d.vendorId})` : ''}`; ok = false; }
+    else if (t === 'order_confirmed') pr = `Order ${d.supplier} ${money(landed(d))}`;
+    else if (t === 'order_declined') { pr = `Order ${d.supplier || ''} ${d.landedTotal != null ? money(d.landedTotal) : ''}`; ok = false; }
+    else if (t === 'job_state') pr = `${d.from} → ${d.to}`;
+    const rule = d.reason || d.detail || (t === 'order_confirmed' ? `Spoken “order it”${d.mockOrder ? ' · mock checkout' : ''}` : t === 'job_state' ? 'compare-and-set transition' : '');
+    job.decisions.push({ rel: ts - job.t0, pr, ok, by, rule, kind: t, callId: d.callId, state: t === 'job_state' && !TERMINAL_BAD.includes(d.to) });
+  }
+
+  function apply(job, ev, ts) {
+    const d = ev.data, s = ev.simulated;
+    if (ev.type === 'fault') job.kind = 'enterprise';
+    advance(job, ev);
+    if (DECISION_TYPES.includes(ev.type)) decision(job, ev, ts);
+    switch (ev.type) {
+      case 'call_started': {
+        const c = getCall(job, d.callId, ts, d.lane);
+        Object.assign(c, { lane: d.lane || c.lane, party: d.party || c.party, phone: d.phone, start: c.lines.length ? c.start : ts, end: null, sim: c.sim || s || d.mode === 'sim' });
+        if (d.lane === 'user' && d.party && !job.partyName) job.partyName = d.party;
+        logIt(job, ts, LANE[c.lane]?.ico || '📞', `${c.lane === 'user' || c.lane === 'delivery' ? 'Calling back' : 'Calling'} ${c.party}${d.phone ? ` (${d.phone})` : ''}`, '', c.sim);
+        break;
+      }
+      case 'transcript': { const c = getCall(job, d.callId, ts, d.lane); c.lines.push({ speaker: d.speaker, text: d.text }); if (s) c.sim = true; break; }
+      case 'call_ended': {
+        const c = getCall(job, d.callId, ts, d.lane); c.end = ts; c.reason = d.reason || 'completed';
+        if (d.party && (c.party === 'Call' || c.party === 'Incoming call')) c.party = d.party;
+        if (d.lane === 'user' && d.party && !job.partyName) job.partyName = d.party;
+        if (c.reason !== 'completed') logIt(job, ts, '📵', `${c.party}: ${c.reason.replace('_', ' ')}${d.endedReason ? ` (${d.endedReason})` : ''}`, 'warn', s);
+        break;
+      }
+      case 'consent':
+        job.consent = d; logIt(job, ts, '🎙️', `Consent: recording OK, callback ${d.callback === false ? 'NOT allowed' : 'allowed'}`, '', s); break;
+      case 'diagnosis':
+        Object.assign(job.facts, { device: d.appliance, model: d.model, issue: d.issue, conf: d.confidence, confLabel: d.label, code: d.code });
+        logIt(job, ts, '🩺', `Diagnosis: ${d.issue}${d.confidence ? ` (${d.label || 'confidence'} ${Math.round(d.confidence * 100)}%)` : ''}`, '', s); break;
+      case 'safety':
+        job.facts.safety = d; logIt(job, ts, '🛡️', `Safety: ${String(d.level).replace(/_/g, ' ')}. ${d.reason || ''}`, d.level === 'pro_required' ? 'warn' : '', s); break;
+      case 'part_identified':
+        job.facts.part = d; logIt(job, ts, '🔩', `Part: ${d.part} ${d.partNumber || ''}`, '', s); break;
+      case 'parts_cache':
+        logIt(job, ts, '🗂️', `Parts catalog: ${d.text || d.detail || (d.hit ? 'cache hit' : 'lookup')}`, '', s); break;
+      case 'warranty':
+        job.warranty = d; logIt(job, ts, '🏷️', `Warranty: ${d.covered ? 'covered' : 'not covered'}. ${d.detail || ''}`, '', s); break;
+      case 'quote': {
+        const isNew = !job.quotes.has(d.supplier);
+        job.quotes.set(d.supplier, { ...d, price: +d.price, isNew, sim: s });
+        logIt(job, ts, isRejected(d) ? '🛑' : '💲', d.reason || `Quote: ${d.supplier} ${money(landed(d))} landed`, isRejected(d) ? 'warn' : '', s);
+        break;
+      }
+      case 'best_deal':
+        job.best = d; logIt(job, ts, '⭐', d.reason || `Cheapest identical part: ${money(landed(d))} at ${d.supplier}`, '', s); break;
+      case 'guard':
+        job.guards.push({ ...d, sim: s, fresh: true });
+        logIt(job, ts, d.action === 'skipped' ? '🛑' : '🚨', `${GUARD_NAMES[d.kind] || d.kind} → ${d.action}: ${d.reason || d.detail || ''}`, d.action === 'skipped' ? 'warn' : 'err', s); break;
+      case 'order_confirmed':
+        job.ordered = d; logIt(job, ts, '✅', `Order confirmed by ${d.confirmedBy || 'voice'}${d.mockOrder ? ' (mock checkout)' : ''}: ${money(landed(d))} at ${d.supplier}`, '', s); break;
+      case 'order_declined':
+        logIt(job, ts, '🙅', `Caller declined: ${d.supplier || ''} ${d.landedTotal != null ? money(d.landedTotal) : ''}`, 'warn', s); break;
+      case 'delivered':
+        job.delivered = { ...d, sim: s || d.simulatedWebhook };
+        logIt(job, ts, '📦', `${d.carrier || 'Carrier'} webhook${d.simulatedWebhook ? ' (simulated)' : ''}: delivered ${d.partNumber || ''}`, '', s || d.simulatedWebhook); break;
+      case 'safety_ack':
+        job.acks.add(d.kind); logIt(job, ts, '✋', `Safety ack by voice: ${String(d.kind).replace('_', ' ')}`, '', s); break;
+      case 'install_step':
+        job.steps[d.step - 1] = d; job.stepOf = d.of;
+        if (!d.skipped) job.curStep = d.step;
+        if (d.skipped) logIt(job, ts, '⏭️', `Step ${d.step} skipped: caller already did it`, '', s);
+        break;
+      case 'fix_verified':
+        job.verified = d; logIt(job, ts, d.ok ? '🎉' : '⚠️', `Fix ${d.ok ? 'verified by voice' : 'NOT verified'}: ${d.detail || ''}`, d.ok ? '' : 'warn', s); break;
+      case 'fault':
+        job.fault = { ...d, sim: s }; job.facts.device = d.asset;
+        logIt(job, ts, '🚨', `Fault ${d.code} on ${d.asset}`, 'warn', s); break;
+      case 'job_state':
+        job.state = d.to; if (TERMINAL_BAD.includes(d.to)) logIt(job, ts, '⛔', `Job ${d.from} → ${d.to}`, 'err', s); break;
+      case 'metrics':
+        job.metrics = d; break;
+      case 'error':
+        logIt(job, ts, '⚠️', `Error in ${d.where || 'server'}: ${d.detail || ''}`, 'err', s); if (job.id === focus) toast(`⚠️ ${d.where}: ${String(d.detail || '').slice(0, 80)}`); break;
+      case 'note':
+        logIt(job, ts, '📝', d.text || '', '', s); break;
+      case 'diagnosis_update': {
+        const prev = job.diag?.posterior || null;
+        const hist = (job.diag?.history || []).concat(d.test ? [{ test: d.test, reading: d.reading }] : []);
+        job.diag = { ...d, prev, history: hist, unknown: /^(unknown|unclear|ambiguous)$/i.test(String(d.reading || '')) };
+        break;
+      }
+      case 'recall_check': job.recall = d; break;
+      case 'vision_session': case 'vision_capture': case 'vision_rank': case 'vision_extract':
+        job.vision = { ...(job.vision || {}), [ev.type]: d, last: ev.type, captures: (job.vision?.captures || 0) + (ev.type === 'vision_capture' ? 1 : 0) }; break;
+    }
+  }
+
+  // ---------- Savings: server numbers win; otherwise derive from quotes ----------
+  function savings(j) {
+    const m = j.metrics || {}, b = j.best || {};
+    const qs = [...j.quotes.values()].filter(q => q.identicalPart !== false);
+    const bestLanded = j.best ? landed(b) : null;
+    const tech = b.techVisitCost;
+    const vsTech = m.savedVsTech ?? b.savedVsTech ?? b.saved ?? (tech && bestLanded != null ? tech - bestLanded : null);
+    let vsNext = m.savedVsNextBest ?? b.savedVsNextBest ?? null, next = null;
+    if (j.best) {
+      next = qs.filter(q => q.supplier !== b.supplier).sort((x, y) => landed(x) - landed(y))[0] || null;
+      if (vsNext == null && next) vsNext = landed(next) - bestLanded;
+    }
+    return { vsTech, vsNext, tech, bestLanded, next };
+  }
+
+  // ---------- Rendering ----------
+  function renderAll(ev) {
+    renderHeader(); renderStages(); renderStrip(); renderTicker(ev); renderLanes(); renderDecisions(); renderFacts(); renderQuotes();
+    renderHero(); renderBanners(); renderDiag();
+  }
+
+  function renderHeader() {
+    renderJobs();
+    const j = J();
+    $('simPill').style.display = j.sim ? '' : 'none';
+    $('simPill').textContent = j.hasLive ? 'SOME LEGS SIMULATED' : 'ALL SIMULATED';
+    const sp = $('statePill');
+    if (j.state) {
+      sp.style.display = ''; sp.textContent = j.state.replace(/_/g, ' ');
+      sp.className = 'pill' + (TERMINAL_BAD.includes(j.state) ? ' bad' : ['FIXED', 'NOTIFIED'].includes(j.state) ? ' done' : '');
+    } else sp.style.display = 'none';
+  }
+
+  function renderJobs() {
+    $('jobs').innerHTML = order.length > 1 ? order.map(id => {
+      const j = jobs.get(id); if (!j) return '';
+      const label = j.kind === 'enterprise' ? `🚨 ${j.fault?.asset?.replace('Terminal tractor ', '') || id}` : `👵 ${j.partyName || id}`;
+      return `<button class="job ${id === focus ? 'on' : ''}" data-job="${esc(id)}" title="${esc(id)}">${esc(label)}</button>`;
+    }).join('') : '';
+  }
+  $('jobs').addEventListener('click', e => {
+    const b = e.target.closest('.job'); if (!b) return;
+    focus = b.dataset.job; pinned = true; const j = jobs.get(focus); j.shown1 = j.shown2 = 0; j.target1 = j.target2 = undefined; renderAll();
+  });
+
+  function renderStages() {
+    const j = J(), stages = j.kind === 'enterprise' ? FAULT_STAGES : CONSUMER_STAGES, last = stages.length - 1;
+    $('stages').innerHTML = stages.map(([label], i) => {
+      const done = i < j.stage || (i === j.stage && i === last);
+      return `<div class="stage ${done ? 'done' : ''} ${i === j.stage && i < last ? 'current' : ''}"><span class="n">${i + 1}</span>${label}</div>`;
+    }).join('');
+  }
+
+  // The latest guard's human-readable reason, big, flashing on arrival.
+  function renderTicker(ev) {
+    const j = J(), g = j.guards[j.guards.length - 1], tk = $('ticker');
+    if (!g) {
+      tk.className = ''; $('tickerText').textContent = 'Armed: call cap · minute cap · $ budget · vendor allow-list · loop / stuck / no-answer · “order it” before any $';
+      $('tickerCount').textContent = ''; return;
+    }
+    tk.className = g.action === 'skipped' ? 'tripped' : 'stopped';
+    $('tickerText').innerHTML = `${g.action === 'skipped' ? '🛑' : '🚨'} ${esc(GUARD_NAMES[g.kind] || g.kind)} → ${esc(g.action)}: ${esc(g.reason || g.detail || '')}${simTag(j, g.sim)}`;
+    $('tickerCount').textContent = j.guards.length > 1 ? `${j.guards.length} guards tripped` : '';
+    if (ev?.type === 'guard') { tk.classList.remove('flash'); void tk.offsetWidth; tk.classList.add('flash'); }
+  }
+
+  function renderLanes() {
+    const j = J(), calls = j.callOrder.map(id => j.calls.get(id));
+    const active = calls.filter(c => c.end === null), done = calls.filter(c => c.end !== null);
+    // Every live call side by side; if nothing is live, keep the last finished call visible.
+    const shown = active.length ? active : done.slice(-1);
+    $('callCount').textContent = calls.length ? `· ${active.length} live · ${calls.length} total` : '';
+    const box = $('lanes');
+    if (!shown.length) {
+      box.innerHTML = `<div class="empty">${j.kind === 'enterprise' ? 'Fault received. Starting calls…' : 'Waiting for a call…<br><small>Dorothy calls Fixie from any phone</small>'}</div>`;
+    } else {
+      if (box.querySelector('.empty')) box.innerHTML = '';
+      const ids = new Set(shown.map(c => 'lane-' + c.id));
+      [...box.children].forEach(el => { if (!ids.has(el.id) || el.dataset.job !== j.id) el.remove(); });
+      shown.forEach(c => {
+        let el = document.getElementById('lane-' + c.id);
+        if (!el) { el = document.createElement('div'); el.id = 'lane-' + c.id; el.dataset.job = j.id; el.innerHTML = '<div class="lh"></div><div class="tx"></div>'; box.appendChild(el); el._n = 0; }
+        const L = LANE[c.lane] || { ico: '📞', role: c.lane };
+        el.className = 'lane ' + (c.end === null ? 'active' : 'ended');
+        el.querySelector('.lh').innerHTML = `<span class="ico">${L.ico}</span><div><div class="party">${esc(c.party)}${c.sim ? SIM : ''}</div><div class="role">${esc(L.role)}${c.phone ? ` · ${esc(c.phone)}` : ''}</div></div>
+          <div class="st">${c.end === null ? `<span class="dot live" style="margin-right:.3em"></span>LIVE <span class="num" data-start="${c.start}">${fmtT((j.lastTs ?? c.start) - c.start)}</span>` : esc(ENDED[c.reason] || c.reason)}</div>`;
+        const tx = el.querySelector('.tx');
+        if (el._n > c.lines.length) { tx.innerHTML = ''; el._n = 0; }
+        for (; el._n < c.lines.length; el._n++) {
+          const l = c.lines[el._n];
+          const who = l.speaker === 'agent' ? 'agent' : (l.speaker === 'user' || l.speaker === 'tech') ? 'user' : 'supplier';
+          const label = who === 'agent' ? 'Fixie' : (c.lane === 'user' || c.lane === 'delivery') ? (j.partyName || 'Caller') : c.party;
+          const div = document.createElement('div'); div.className = 'line';
+          div.innerHTML = `<span class="who ${who}">${esc(String(label).split(' ')[0])}</span>${esc(l.text)}`;
+          tx.appendChild(div);
+        }
+        tx.scrollTop = tx.scrollHeight;
+      });
+    }
+    const chips = done.filter(c => !shown.includes(c));
+    $('doneCalls').innerHTML = chips.map(c => `<span class="chip ${c.reason !== 'completed' ? 'bad' : ''}">${(LANE[c.lane] || {}).ico || '📞'} <b>${esc(c.party)}</b> ${esc(ENDED[c.reason] || c.reason)} · <span class="num">${fmtT(c.end - c.start)}</span></span>`).join('');
+  }
+
+  function badge(id, cls, text) { const b = $(id); b.className = 'badge ' + cls; b.textContent = text; }
+
+  function renderFacts() {
+    const j = J(), f = j.facts;
+    $('fDevice').innerHTML = f.device ? `${esc(f.device)}${f.model ? ` <small>${esc(f.model)}</small>` : ''}` : '—';
+    $('fIssue').innerHTML = f.issue ? `${f.code ? `<span class="num">${esc(f.code)}</span>: ` : ''}${esc(f.issue)}${f.conf ? ` <small>${esc(f.confLabel || 'confidence')} ${Math.round(f.conf * 100)}%</small>` : ''}`
+                                    : (j.fault ? `${esc(j.fault.code)} <small>J1939 fault code</small>` : '—');
+    $('fPart').innerHTML = f.part ? `${esc(f.part.part)} <small>${esc(f.part.partNumber || '')}${f.part.crossRefs?.length ? ` = ${f.part.crossRefs.map(esc).join(', ')}` : ''}</small>` : '—';
+    const s = f.safety;
+    if (!s) badge('fSafety', 'none', 'pending');
+    else if (s.level === 'pro_required') badge('fSafety', 'serious', '⚠ Pro only');
+    else if (s.level === 'diy_with_caution') badge('fSafety', 'warn', '⚠ DIY with caution');
+    else badge('fSafety', 'good', '✓ DIY-safe');
+    $('fSafetyWhy').textContent = s?.reason || '';
+    const w = j.warranty;
+    if (!w) badge('fWarranty', 'none', j.kind === 'enterprise' ? 'n/a' : 'not checked');
+    else if (w.covered) badge('fWarranty', 'good', '✓ Covered');
+    else badge('fWarranty', 'warn', '✗ Not covered');
+    $('fWarrantyWhy').textContent = w?.detail || '';
+    $('fConsent').innerHTML = j.consent
+      ? `<span class="ack on">✓ Recording OK</span> <span class="ack ${j.consent.callback === false ? '' : 'on'}">${j.consent.callback === false ? '✗ No callback' : '✓ Callback to caller ID'}</span>`
+      : '<small>—</small>';
+    const r = j.recall, v = j.vision;
+    $('kRecall').style.display = $('fRecall').style.display = r ? '' : 'none';
+    if (r) {
+      const hit = r.recalled ?? r.hit ?? r.found ?? (Array.isArray(r.recalls) ? r.recalls.length > 0 : false);
+      $('fRecall').innerHTML = `<span class="badge ${hit ? 'serious' : 'good'}">${hit ? '⚠ Recall found' : '✓ No open recall'}</span> <small>${esc(r.detail || r.reason || r.source || '')}</small>`;
+    }
+    $('kCam').style.display = $('fCam').style.display = v ? '' : 'none';
+    if (v) {
+      const x = v.vision_extract || {}, summary = x.model || x.text || x.summary || x.result || x.partNumber || '';
+      $('fCam').innerHTML = `📷 ${v.captures || 0} frame${v.captures === 1 ? '' : 's'}${v.vision_rank ? ' · best frame picked' : ''}${summary ? ` · read <b>${esc(summary)}</b>` : ''} <small>${esc(x.confidence != null ? `${Math.round(x.confidence * 100)}%` : '')}</small>`;
+    }
+  }
+
+  function rejTag(q) {
+    if (q.identicalPart === false) return 'NOT IDENTICAL';
+    const budget = J().kind === 'enterprise' ? CAPS.techBudget : CAPS.budget;
+    if (/budget/i.test(q.reason || q.rejectedReason || '') || landed(q) > budget) return 'OVER BUDGET';
+    return 'REJECTED';
+  }
+
+  function renderQuotes() {
+    const j = J();
+    const qs = [...j.quotes.values()].sort((a, b) => (isRejected(a) - isRejected(b)) || landed(a) - landed(b));
+    if (!qs.length) { $('quotes').innerHTML = `<tr><td colspan="4" class="sm" style="border:0">${j.warranty?.covered ? 'Covered by warranty: $0' : 'No quotes yet'}</td></tr>`; return; }
+    const max = Math.max(...qs.map(landed));
+    const bestName = j.best?.supplier;
+    $('quotes').innerHTML = qs.map(q => {
+      const rej = isRejected(q), best = q.supplier === bestName;
+      const part = q.identicalPart === false ? `✗ read back ${q.partNumberSaid ? esc(q.partNumberSaid) : '?'}: not the part we need` : `✓ identical${q.partNumberSaid ? `: read back ${esc(q.partNumberSaid)}` : ''}`;
+      return `<tr class="${best ? 'best' : ''} ${rej ? 'rej' : ''} ${q.isNew ? 'newrow' : ''}">
+        <td><b class="sname">${esc(q.supplier)}</b>${best ? '<span class="tag best">CHEAPEST</span>' : ''}${rej ? `<span class="tag rej">${rejTag(q)}</span>` : ''}${simTag(j, q.sim)}
+          <div class="sm">${part}${q.inStock === false ? ' · out of stock' : q.inStock ? ' · in stock' : ''}</div>
+          ${rej ? `<div class="why">${esc(q.rejectedReason || q.reason || '')}</div>` : ''}</td>
+        <td class="price num">${money(landed(q))}${q.shipping != null ? `<small>${money(q.price)} + ${money(q.shipping)} ship</small>` : ''}</td>
+        <td class="barc"><div class="bar" style="width:${(landed(q) / max * 100).toFixed(1)}%"></div></td>
+        <td class="sm">${esc(q.eta || '—')}</td></tr>`;
+    }).join('');
+    qs.forEach(q => q.isNew = false);
+  }
+
+  function minutesUsed(j) {
+    if (j.metrics?.minutes != null) return +j.metrics.minutes;
+    const live = (mode === 'live' || mode === 'poll') && j.lastPerf != null ? performance.now() - j.lastPerf : 0;
+    let ms = 0; j.calls.forEach(c => { ms += (c.end ?? (j.lastTs + live)) - c.start; });
+    return Math.max(0, ms / 60000);
+  }
+
+
+  // ---------- Proof strip (always visible) ----------
+  function stripCell(id, html, frac) {
+    const c = $(id); c.querySelector('.v').innerHTML = html;
+    const t = c.querySelector('.trk > div'); if (t) t.style.width = Math.min(100, (frac || 0) * 100) + '%';
+    c.classList.toggle('hot', frac >= 0.8 && frac <= 1); c.classList.toggle('over', frac > 1);
+  }
+  function minutesUsed(j) {
+    if (j.metrics?.minutes != null) return +j.metrics.minutes;
+    const live = (mode === 'live' || mode === 'poll') && j.lastPerf != null ? performance.now() - j.lastPerf : 0;
+    let ms = 0; j.calls.forEach(c => { ms += (c.end ?? (j.lastTs + live)) - c.start; });
+    return Math.max(0, ms / 60000);
+  }
+  // Parallel = wall-clock span of the sourcing calls; serial = what the same calls would take one after another.
+  function parSer(j) {
+    const m = j.metrics || {};
+    if (m.parallelMinutes != null && m.serialMinutes != null) return [+m.parallelMinutes, +m.serialMinutes];
+    const cs = [...j.calls.values()].filter(c => (c.lane === 'warranty' || c.lane === 'supplier') && c.end != null);
+    if (cs.length < 2) return null;
+    const ser = cs.reduce((a, c) => a + (c.end - c.start), 0), par = Math.max(...cs.map(c => c.end)) - Math.min(...cs.map(c => c.start));
+    return [par / 60000, ser / 60000];
+  }
+  function renderStrip() {
+    const j = J(), m = j.metrics || {};
+    const maxCalls = m.maxCalls || CAPS.calls, maxMin = m.maxMinutes || CAPS.minutes, spendCap = m.spendCap || CAPS.spend;
+    const budget = m.budget || (j.kind === 'enterprise' ? CAPS.techBudget : CAPS.budget);
+    // The call cap counts warranty/supplier calls; user/delivery/tech lanes are exempt (SPEC §5).
+    const guarded = m.guardedCalls ?? [...j.calls.values()].filter(c => c.lane === 'warranty' || c.lane === 'supplier').length;
+    stripCell('sCalls', `${guarded} <small>/ ${maxCalls}</small>`, guarded / maxCalls);
+    const mins = minutesUsed(j);
+    stripCell('sMin', `${mins.toFixed(1)} <small>/ ${maxMin}</small>`, mins / maxMin);
+    const ps = parSer(j);
+    const dur = x => x < 1 ? `${Math.round(x * 60)}<small>s</small>` : `${x.toFixed(1)}<small> min</small>`;
+    stripCell('sPar', ps ? `${dur(ps[0])} <small>parallel vs</small> ${dur(ps[1])} <small>serial</small>` : '—');
+    const committed = j.ordered ? landed(j.ordered) : j.best ? landed(j.best) : 0;
+    stripCell('sBudget', `${money(committed)} <small>/ ${money(budget)}${j.best && !j.ordered ? ' proposed' : ''}</small>`, committed / budget);
+    const fired = m.guardsFired ?? j.guards.length;
+    const vm = m.voicemailsSkipped ?? j.guards.filter(g => g.kind === 'voicemail' || g.kind === 'no_answer').length;
+    stripCell('sGuards', `${fired}${vm ? ` <small>· ${vm} unanswered skipped</small>` : ''}`);
+    $('sGuards').classList.toggle('alert', fired > 0);
+    const spend = +(m.agentCostUsd || 0);
+    stripCell('sSpend', `$${spend.toFixed(2)} <small>/ ${money(spendCap)}</small>`, spend / spendCap);
+  }
+
+  // ---------- Decision log ----------
+  const WHO = { code: ['code', 'CODE'], user_voice: ['voice', '🗣 VOICE'], caregiver: ['care', 'CAREGIVER'] };
+  function renderDecisions() {
+    const j = J(), box = $('dlog');
+    // Only rows added since the last render animate in.
+    const fresh = box._job === j.id ? j.decisions.length - (box._n || 0) : 0;
+    box._job = j.id; box._n = j.decisions.length;
+    box.innerHTML = j.decisions.length ? j.decisions.slice(-60).reverse().map((r, i) => {
+      const [cls, label] = WHO[r.by] || ['code', String(r.by).toUpperCase()];
+      return `<div class="dr ${r.ok ? '' : 'no'} ${r.state ? 'state' : ''} ${i < fresh ? 'new' : ''}"><span class="t num">${fmtT(r.rel)}</span><span class="pr" title="${esc(r.pr)}">${esc(r.pr)}</span>
+        <span>${r.ok ? '✅' : '⛔'}</span><span class="who2 ${cls}">${esc(r.by === 'user_voice' && j.partyName ? `🗣 ${j.partyName.toUpperCase()}` : label)}</span><span class="rule" title="${esc(r.rule)}">${esc(r.rule)}</span></div>`;
+    }).join('') : '<div class="empty" style="margin:0">No decisions yet. Every quote, pick, guard and order lands here with the rule that approved or blocked it.</div>';
+  }
+
+  // ---------- Live diagnosis: probability bars ----------
+  function renderDiag() {
+    const j = J(), d = j.diag, el = $('diag');
+    if (!d || !d.posterior) { el.classList.remove('show'); el.dataset.job = ''; return; }
+    el.classList.add('show');
+    const compact = j.diagOpen === null ? j.stage >= 2 : !j.diagOpen;   // collapse once sourcing starts; click toggles
+    el.classList.toggle('compact', compact); el.classList.toggle('unknown', !!d.unknown);
+    const post = d.posterior, prev = d.prev || {};
+    if (el.dataset.job !== j.id || !el.querySelector('.probs')) {
+      el.dataset.job = j.id;
+      j.diagOrder = Object.keys(post);  // stable row order, so bars grow and shrink in place
+      el.innerHTML = `<div class="head"><h2 style="margin:0">Live diagnosis · Bayesian update after each test</h2><span class="topline"></span></div>
+        <div class="probs">${j.diagOrder.map(id => `<span class="pn" data-h="${esc(id)}">${esc(hypName(id))}</span><div class="pt"><div class="pb" data-h="${esc(id)}" style="width:0"></div><div class="pg" data-h="${esc(id)}"></div></div><span class="pv num" data-h="${esc(id)}">0%</span>`).join('')}</div>
+        <div class="reason"></div><div class="meta2"></div>`;
+    }
+    const top = d.top || Object.keys(post).sort((a, b) => post[b] - post[a])[0];
+    const topP = d.topProb ?? post[top];
+    (j.diagOrder || []).forEach(id => {
+      const v = +post[id] || 0, q = (sel) => el.querySelector(`${sel}[data-h="${CSS.escape(id)}"]`);
+      requestAnimationFrame(() => { q('.pb').style.width = (v * 100).toFixed(1) + '%'; });
+      q('.pb').classList.toggle('top', id === top); q('.pn').classList.toggle('top', id === top);
+      q('.pv').textContent = Math.round(v * 100) + '%';
+      const g = q('.pg'); g.style.display = prev[id] != null && Math.abs(prev[id] - v) > 0.005 ? '' : 'none'; g.style.left = ((+prev[id] || 0) * 100).toFixed(1) + '%';
+    });
+    const confident = topP >= 0.85;
+    el.querySelector('.topline').innerHTML = `<b>${esc(hypName(top))} ${Math.round(topP * 100)}%</b> ${confident ? '<span class="badge good">✓ confident ≥ 85%</span>' : '<span class="badge none">testing…</span>'}`;
+    const fallback = d.test ? `${d.test.replace(/_/g, ' ')}: ${d.reading} → P(${hypName(top).toLowerCase()}) ${prev[top] != null ? prev[top].toFixed(2) + '→' : ''}${(+topP).toFixed(2)}` : 'Prior from the symptom';
+    el.querySelector('.reason').innerHTML = `${d.unknown ? '⚠ Ambiguous reading: never passes the gate. ' : ''}${esc(d.reason || fallback)}`;
+    el.querySelector('.meta2').innerHTML = `<span class="tests">${(d.history || []).map(h => `<span class="ack on">${esc(String(h.test).replace(/_continuity|_check/, '').replace(/_/g, ' '))}: ${esc(h.reading)}</span>`).join('')}</span>
+      ${d.next ? `<span>Next test: <b>${esc(String(d.next).replace(/_/g, ' '))}</b></span>` : confident ? '<span>No more tests needed</span>' : ''}
+      <span>Likelihoods are expert-written, not learned.</span>`;
+  }
+  $('diag').addEventListener('click', () => { const j = jobs.get(focus); if (!j) return; const compactNow = $('diag').classList.contains('compact'); j.diagOpen = compactNow; renderDiag(); });
+
+  let rafId;
+  function renderHero() {
+    const j = J(), sv = savings(j), b = j.best;
+    $('hero').classList.toggle('final', !!(j.ordered && b));
+    if (b) {
+      $('sub1').innerHTML = sv.tech ? `Tech visit <b>${money(sv.tech)}</b> → <b>${money(sv.bestLanded)}</b> landed + a guided ${j.kind === 'enterprise' ? 'swap' : '15-min install'}` : 'No tech-visit baseline for this job';
+      $('sub2').innerHTML = sv.next ? `<b>${esc(sv.next.supplier)}</b> ${money(landed(sv.next))}${isRejected(sv.next) ? ' (rejected)' : ''} → <b>${esc(b.supplier)}</b> ${money(sv.bestLanded)}` : 'Only one usable quote';
+    } else {
+      const qs = [...j.quotes.values()];
+      $('sub1').textContent = j.warranty?.covered ? 'Covered by warranty' : qs.length ? (qs.every(isRejected) ? 'No usable quote yet' : 'Comparing sellers…') : 'Waiting for quotes…';
+      $('sub2').textContent = 'Same part number, landed price';
+    }
+    const t1 = sv.vsTech > 0 ? +sv.vsTech : 0, t2 = sv.vsNext > 0 ? +sv.vsNext : 0;
+    // Only (re)start the count-up when a target changes; otherwise every transcript line would restart it.
+    if (j.target1 === t1 && j.target2 === t2 && $('saved1').dataset.job === j.id) return;
+    j.target1 = t1; j.target2 = t2; $('saved1').dataset.job = j.id;
+    cancelAnimationFrame(rafId);
+    const f1 = j.shown1, f2 = j.shown2, t0 = performance.now(), dur = 1600;
+    $('saved1').classList.toggle('muted', t1 <= 0); $('saved2').classList.toggle('muted', t2 <= 0);
+    const show = (v, target, k) => k < 1 ? Math.round(v).toLocaleString() : (Number.isInteger(target) ? target.toLocaleString() : target.toFixed(2));
+    const step = now => {
+      const k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+      j.shown1 = f1 + (t1 - f1) * e; j.shown2 = f2 + (t2 - f2) * e;
+      $('saved1').innerHTML = `<span class="cur">$</span>${show(j.shown1, t1, k)}`;
+      $('saved2').innerHTML = `<span class="cur">$</span>${show(j.shown2, t2, k)}`;
+      if (k < 1) rafId = requestAnimationFrame(step);
+    };
+    rafId = requestAnimationFrame(step);
+  }
+
+  function renderBanners() {
+    const j = J(), fb = $('faultBanner'), ib = $('install');
+    if (j.fault) {
+      fb.classList.add('show');
+      fb.innerHTML = `<div class="k">ENTERPRISE · SAME ENGINE · J1939 FAULT${j.fault.sim ? ' ' + SIM : ''}</div><div class="big">🚨 ${esc(j.fault.asset)}: <span class="num">${esc(j.fault.code)}</span></div>
+        <div class="sub">${esc(j.fault.site || '')}${j.fault.tech ? ` · tech: ${esc(j.fault.tech)}` : ''}</div>`;
+    } else fb.classList.remove('show');
+    if (j.delivered || j.steps.length || j.verified) {
+      ib.classList.add('show'); ib.classList.toggle('verified', !!j.verified?.ok);
+      const cur = j.steps[(j.curStep || 1) - 1];
+      const acks = `<div class="acks">${['unplugged', 'vent_cleared'].map(k => `<span class="ack ${j.acks.has(k) ? 'on' : ''}">${j.acks.has(k) ? '✓' : '○'} ${k === 'unplugged' ? 'Unplugged' : 'Vent cleared'}</span>`).join('')}</div>`;
+      const dl = j.delivered ? `📦 ${esc(j.delivered.carrier || '')} delivered ${esc(j.delivered.partNumber || '')}${j.delivered.sim ? SIM : ''}` : '';
+      const skipped = j.steps.filter(s => s?.skipped).length;
+      if (j.verified) {
+        ib.innerHTML = `<h2>Voice install walkthrough</h2><div class="ok">${j.verified.ok ? '🎉 Fixed' : '⚠️ Not fixed: escalated'}: ${esc(j.verified.detail || '')}</div>
+          <div class="meta" style="margin-top:.4em"><span>Coached by voice, ${j.stepOf || j.steps.length} steps${skipped ? ` (${skipped} already done by caller)` : ''}. No screen.</span>${acks}</div>`;
+      } else if (cur) {
+        ib.innerHTML = `<h2>Voice install walkthrough</h2><div class="meta"><span>Step ${cur.step} of ${cur.of}${skipped ? ` · ${skipped} skipped` : ''}</span>${acks}</div>
+          <div class="stepbig">${esc(cur.text)}</div><div class="prog"><div style="width:${cur.step / cur.of * 100}%"></div></div>`;
+      } else {
+        ib.innerHTML = `<h2>Delivery</h2><div class="meta"><span>${dl}</span>${acks}</div><div class="stepbig">Part arrived. Fixie is calling ${esc(j.partyName || 'the customer')} to install it together.</div>`;
+      }
+    } else ib.classList.remove('show');
+  }
+
+  // Tick: clock, live call timers, live minutes estimate
+  setInterval(() => {
+    const j = jobs.get(focus); if (!j || j.t0 == null) return;
+    const ended = j.verified || ['FIXED', 'NOTIFIED', 'STOPPED', 'DECLINED', 'ESCALATED'].includes(j.state);
+    const live = (mode === 'live' || mode === 'poll') && j.lastPerf != null && !ended ? performance.now() - j.lastPerf : 0;
+    $('clock').textContent = fmtT(j.lastTs - j.t0 + live);
+    document.querySelectorAll('[data-start]').forEach(el => el.textContent = fmtT(j.lastTs + live - +el.dataset.start));
+    if (!j.metrics) renderStrip();
+  }, 500);
+
+  // ---------- Connection: SSE → /events.json polling → mock (keeps probing for the real server) ----------
+  function setConn(kind, text) { $('conn').className = 'pill ' + kind; $('connText').textContent = text; }
+  function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 4000); }
+
+  let es = null, pollTimer = null, playTimer = null, retryTimer = null, reconnectTimer = null, mode = null, paused = false;
+  let resumeDelivery = null;
+
+  function stopAll() {
+    if (es) { es.close(); es = null; }
+    clearInterval(pollTimer); clearTimeout(playTimer); clearInterval(retryTimer); clearTimeout(reconnectTimer);
+    resumeDelivery = null;
+  }
+
+  function connectSSE(onFail) {
+    let opened = false;
+    if (mode !== 'live') setConn('', 'Connecting…');
+    try { es = new EventSource(SERVER + '/events'); } catch { return onFail(); }
+    es.onopen = () => { opened = true; mode = 'live'; setConn('live', 'LIVE'); };
+    const onEv = e => handle(normalize(e.data));
+    es.onmessage = onEv;
+    es.addEventListener('fixie', onEv);
+    es.addEventListener('reset', () => { resetAll(); toast('Server reset: board cleared'); });
+    es.onerror = () => {
+      if (!opened) { es.close(); es = null; return onFail(); }
+      // Reconnect with a fresh EventSource (no Last-Event-ID), so a restarted server replays its full history; de-dupe absorbs repeats.
+      setConn('down', 'Reconnecting…'); es.close(); es = null;
+      const retry = () => connectSSE(() => { setConn('down', 'Server unreachable, retrying…'); reconnectTimer = setTimeout(retry, 3000); });
+      reconnectTimer = setTimeout(retry, 1500);
+    };
+    setTimeout(() => { if (!opened && es && es.readyState !== 1) { es.close(); es = null; onFail(); } }, 4000);
+  }
+
+  async function pollJSON() {
+    const r = await fetch(`${SERVER}/events.json?since=${lastSeq}`, { cache: 'no-store' });
+    if (!r.ok) throw new Error(r.status);
+    const j = await r.json();
+    (Array.isArray(j) ? j : j.events || []).forEach(e => handle(normalize(e)));
+  }
+  function startPolling(onFail) {
+    pollJSON().then(() => {
+      mode = 'poll'; setConn('live', 'LIVE (polling)');
+      pollTimer = setInterval(() => pollJSON().catch(() => setConn('down', 'Server unreachable')), 1000);
+    }).catch(onFail);
+  }
+
+  // ---------- Playback (mock file, replay of a server events.jsonl, or a dropped file) ----------
+  function parseEvents(text) {
+    const t = text.trim();
+    if (t.startsWith('[') || t.startsWith('{"events"')) { const j = JSON.parse(t); return Array.isArray(j) ? j : j.events; }
+    return t.split('\n').map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+  }
+  // events.jsonl appends across server restarts and rehearsals: split into runs where the seq resets or there's a 20-min gap.
+  function splitRuns(evs) {
+    const runs = [];
+    evs.forEach((e, i) => {
+      const p = evs[i - 1];
+      const brk = !p || (e.id != null && p.id != null && e.id <= p.id) || (Date.parse(e.ts) - Date.parse(p.ts) > 20 * 60000);
+      if (brk) runs.push([]);
+      runs[runs.length - 1].push(e);
+    });
+    return runs;
+  }
+
+  function play(events, label) {
+    stopAll(); resetAll(); mode = 'play';
+    setConn('mock', label);
+    let i = 0;
+    const next = () => {
+      if (paused) { playTimer = setTimeout(next, 200); return; }
+      if (i >= events.length) { if (P.has('loop')) playTimer = setTimeout(() => play(events, label), 8000); return; }
+      const ev = events[i];
+      // Pause before the delivery so the presenter can press D (auto-resumes unless ?manual).
+      if (ev.type === 'delivered' && !ev._resumed) {
+        resumeDelivery = () => { if (!resumeDelivery) return; resumeDelivery = null; ev._resumed = true; clearTimeout(playTimer); next(); };
+        if (!MANUAL_DELIVERY) playTimer = setTimeout(resumeDelivery, 4000 / SPEED);
+        toast('Paused before delivery: press D');
+        return;
+      }
+      i++;
+      handle(normalize(ev));
+      if (i < events.length) {
+        const gap = (Date.parse(events[i].ts) - Date.parse(ev.ts)) || 300;
+        playTimer = setTimeout(next, Math.max(120, Math.min(MAX_GAP_MS, gap)) / SPEED);
+      } else next();
+    };
+    playTimer = setTimeout(next, 600);
+  }
+
+  async function loadEvents(urls) {
+    for (const url of urls) {
+      try {
+        const r = await fetch(url, { cache: 'no-store' });
+        if (r.ok) { const evs = parseEvents(await r.text()); if (evs.length) return { url, evs }; }
+      } catch { /* try next */ }
+    }
+    return null;
+  }
+
+  async function startReplay(urls) {
+    const got = await loadEvents(urls);
+    if (!got) return fileError(urls[0]);
+    const runs = splitRuns(got.evs), n = parseInt(P.get('run') || '-1', 10);
+    const idx = Math.max(0, Math.min(runs.length - 1, n < 0 ? runs.length + n : n - 1));
+    play(runs[idx], `REPLAY ${got.url.split('/').pop()} · run ${idx + 1}/${runs.length}`);
+  }
+
+  async function startMock(offline) {
+    const got = await loadEvents(['mock-events.json']);
+    if (!got) return fileError('mock-events.json');
+    play(got.evs, offline ? 'MOCK (server offline)' : 'MOCK DEMO');
+    if (offline) retryTimer = setInterval(probeLive, 5000);
+  }
+
+  function fileError(url) {
+    resetAll(); setConn('down', 'Playback file not loadable');
+    $('lanes').innerHTML = `<div class="empty">Couldn't load <b>${esc(url)}</b>.<br>Serve the board with <code>node web/serve.mjs</code> (browsers block <code>file://</code>),<br>or drag an <b>events.jsonl</b> onto this window.</div>`;
+  }
+
+  async function probeLive() {
+    try {
+      const r = await fetch(SERVER + '/events.json?since=999999999', { cache: 'no-store' });
+      if (r.ok) { toast('Server is up. Switching to live events.'); stopAll(); resetAll(); goLive(); }
+    } catch { /* still down */ }
+  }
+  function goLive() { mode = null; connectSSE(() => startPolling(() => startMock(true))); }
+
+  // Drag-and-drop any events.jsonl to replay its last run (L4 fallback without a server).
+  addEventListener('dragover', e => { e.preventDefault(); $('drop').classList.add('show'); });
+  addEventListener('dragleave', e => { if (e.target === $('drop')) $('drop').classList.remove('show'); });
+  addEventListener('drop', async e => {
+    e.preventDefault(); $('drop').classList.remove('show');
+    const f = e.dataTransfer.files[0]; if (!f) return;
+    const runs = splitRuns(parseEvents(await f.text()));
+    play(runs[runs.length - 1] || [], `REPLAY ${f.name} · last of ${runs.length} runs`);
+  });
+
+  // ---------- Admin actions (hidden hotkeys) ----------
+  // Served by web/serve.mjs, POST /admin/<path> is proxied to the server with x-admin taken from server/.env,
+  // so the token never reaches the browser. Without the proxy, fall back to a token passed once as #admin=… .
+  const hashAdmin = new URLSearchParams(location.hash.slice(1)).get('admin');
+  if (hashAdmin) { sessionStorage.setItem('fixieAdmin', hashAdmin); history.replaceState(null, '', location.pathname + location.search); }
+  let proxyOk = null;
+  async function admin(path, body = {}) {
+    if (proxyOk === null) proxyOk = await fetch('/admin/ping', { cache: 'no-store' }).then(r => r.ok).catch(() => false);
+    const tok = sessionStorage.getItem('fixieAdmin');
+    if (!proxyOk && !tok) { toast('Admin hotkeys need the board served by: node web/serve.mjs'); return; }
+    try {
+      const r = proxyOk
+        ? await fetch('/admin' + path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-fixie-server': SERVER }, body: JSON.stringify(body) })
+        : await fetch(SERVER + path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin': tok }, body: JSON.stringify(body) });
+      const txt = await r.text();
+      toast(r.ok ? `✓ ${path}` : `${path}: ${r.status} ${txt.slice(0, 80)}`);
+    } catch (e) { toast(`${path}: ${e.message}`); }
+  }
+  const realJob = () => (focus && focus !== PENDING ? focus : order[order.length - 1]);
+
+  // Keys: I sim intake · D deliver · P port fault · X kill switch · R restart playback / clear · Space pause · M mock · L live · T theme · F fullscreen
+  addEventListener('keydown', e => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const k = e.key.toLowerCase();
+    if (k === 'd') {
+      if (mode === 'play') { if (resumeDelivery) resumeDelivery(); return; }
+      const ordered = [...jobs.values()].filter(j => j.state === 'ORDERED').pop();
+      admin('/simulate/delivered', { jobId: ordered?.id || realJob(), carrier: 'UPS', event: 'package.delivered', status: 'delivered', trackingNumber: '1ZFIXIESIM' });
+    }
+    if (k === 'i' && mode !== 'play') admin('/demo/sim-intake');
+    if (k === 'p' && mode !== 'play') admin('/fault', { asset: 'Terminal tractor YT-07', code: 'SPN 3226 FMI 4', site: 'Port of San Diego, 10th Ave Marine Terminal' });
+    if (k === 'x' && mode !== 'play' && realJob() && confirm(`Kill switch: stop ${realJob()} and hang up its live calls?`)) admin(`/jobs/${encodeURIComponent(realJob())}/stop`);
+    if (k === 'r') { if (mode === 'play') location.reload(); else { resetAll(); toast('Board cleared (server untouched)'); } }
+    if (k === ' ') { paused = !paused; toast(paused ? 'Paused' : 'Resumed'); e.preventDefault(); }
+    if (k === 'm') startMock(false);
+    if (k === 'l') { stopAll(); resetAll(); goLive(); }
+    if (k === 't') { const r = document.documentElement; r.dataset.theme = r.dataset.theme === 'light' ? 'dark' : 'light'; }
+    if (k === 'f') document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+  });
+
+  resetAll();
+  if (REPLAY !== undefined) startReplay(REPLAY ? [REPLAY] : ['/replay/events.jsonl', 'sample-real-sim-run.jsonl']);
+  else if (MOCK) startMock(false);
+  else goLive();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+{
+  "user": { "id": "dorothy", "name": "Dorothy", "phone": "+16195550100", "lane": "user" },
+  "warranty": { "id": "whirlpool", "name": "Whirlpool Parts & Warranty", "phone": "+16195550101", "lane": "warranty", "simPersona": "out_of_warranty" },
+  "suppliers": [
+    { "id": "valley", "name": "Valley Appliance Parts", "phone": "+16195550102", "lane": "supplier", "simPersona": "quote:55.00:4.00:in_stock:pickup today" },
+    { "id": "partsdirect", "name": "PartsDirect Counter", "phone": "+16195550103", "lane": "supplier", "simPersona": "quote:9.10:3.95:in_stock:Tuesday" },
+    { "id": "coast", "name": "Coast Supply", "phone": "+16195550104", "lane": "supplier", "simPersona": "no_answer" }
+  ],
+  "tech": { "id": "tech", "name": "Marco (yard tech)", "phone": "+16195550105", "lane": "tech" }
+}

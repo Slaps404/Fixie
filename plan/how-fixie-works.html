@@ -1,0 +1,607 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How Fixie works: explainer for Jianan</title>
+<style>
+  :root {
+    --fx-bg: #f7f6f2; --fx-card: #ffffff; --fx-ink: #1d1f23; --fx-muted: #5b6270; --fx-line: #e3e1da;
+    --fx-brand: #1f6f5c; --fx-brand-soft: #e3f1ec; --fx-warn: #b4560b; --fx-warn-soft: #fdf0e3;
+    --fx-bad: #b42318; --fx-bad-soft: #fde8e6; --fx-ok: #1a7f37; --fx-ok-soft: #e6f4ea;
+    --fx-sim: #8a6100; --fx-sim-soft: #fff4d1; --fx-blue: #2457a6; --fx-blue-soft: #e7eefb;
+    --fx-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fx-bg: #15171b; --fx-card: #1e2127; --fx-ink: #e9e7e1; --fx-muted: #a2a8b3; --fx-line: #343842;
+      --fx-brand: #5cc4a6; --fx-brand-soft: #1d3a32; --fx-warn: #f0a259; --fx-warn-soft: #3a2a19;
+      --fx-bad: #f2867b; --fx-bad-soft: #3d1f1c; --fx-ok: #6fd18a; --fx-ok-soft: #1b3324;
+      --fx-sim: #f2c94c; --fx-sim-soft: #3a3115; --fx-blue: #8fb3ef; --fx-blue-soft: #1d2a40;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--fx-bg); color: var(--fx-ink); font: 17px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 28px 22px 80px; }
+  header.top { display: flex; gap: 18px; align-items: center; margin-bottom: 8px; }
+  header.top .logo { width: 52px; height: 52px; border-radius: 14px; background: var(--fx-brand); color: #fff; display: grid; place-items: center; font-weight: 800; font-size: 26px; }
+  h1 { font-size: 34px; margin: 0; letter-spacing: -0.02em; }
+  .sub { color: var(--fx-muted); margin: 2px 0 0; }
+  nav.toc { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 28px; }
+  nav.toc a { text-decoration: none; color: var(--fx-brand); background: var(--fx-brand-soft); padding: 6px 12px; border-radius: 999px; font-size: 14.5px; font-weight: 600; }
+  section { margin: 0 0 46px; }
+  h2 { font-size: 26px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  h2 .n { color: var(--fx-brand); margin-right: 8px; }
+  .lede { color: var(--fx-muted); margin: 0 0 18px; max-width: 860px; }
+  h3 { font-size: 18px; margin: 0 0 6px; }
+  .card { background: var(--fx-card); border: 1px solid var(--fx-line); border-radius: 14px; padding: 18px 20px; }
+  .grid { display: grid; gap: 14px; }
+  .g2 { grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); }
+  .g3 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+  code, .mono { font-family: var(--fx-mono); font-size: 0.88em; }
+  code { background: var(--fx-brand-soft); padding: 1px 5px; border-radius: 5px; }
+  .pill { display: inline-block; font-size: 12.5px; font-weight: 700; padding: 2px 9px; border-radius: 999px; letter-spacing: 0.02em; vertical-align: 2px; }
+  .p-ok { background: var(--fx-ok-soft); color: var(--fx-ok); }
+  .p-bad { background: var(--fx-bad-soft); color: var(--fx-bad); }
+  .p-warn { background: var(--fx-warn-soft); color: var(--fx-warn); }
+  .p-sim { background: var(--fx-sim-soft); color: var(--fx-sim); }
+  .p-blue { background: var(--fx-blue-soft); color: var(--fx-blue); }
+  .p-brand { background: var(--fx-brand-soft); color: var(--fx-brand); }
+
+  /* story */
+  .story { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; }
+  @media (max-width: 900px) { .story { grid-template-columns: repeat(2, 1fr); } }
+  .beat { background: var(--fx-card); border: 1px solid var(--fx-line); border-radius: 14px; padding: 14px; position: relative; }
+  .beat .num { width: 30px; height: 30px; border-radius: 50%; background: var(--fx-brand); color: #fff; display: grid; place-items: center; font-weight: 800; margin-bottom: 8px; }
+  .beat .em { font-size: 26px; }
+  .beat b { display: block; margin: 4px 0 4px; }
+  .beat p { margin: 0; font-size: 14.5px; color: var(--fx-muted); }
+  .numbers { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+  .stat { background: var(--fx-card); border: 1px solid var(--fx-line); border-radius: 12px; padding: 10px 14px; min-width: 150px; }
+  .stat .v { font-size: 24px; font-weight: 800; color: var(--fx-brand); }
+  .stat .k { font-size: 13px; color: var(--fx-muted); }
+  .tagline { font-size: 21px; font-weight: 700; margin: 16px 0 0; }
+
+  /* lifecycle */
+  .flow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 6px 0 4px; }
+  .st { font-family: var(--fx-mono); font-size: 13px; font-weight: 700; padding: 6px 10px; border-radius: 8px; background: var(--fx-brand-soft); color: var(--fx-brand); border: 1px solid transparent; }
+  .st.term { background: var(--fx-ok-soft); color: var(--fx-ok); }
+  .st.exit { background: var(--fx-bad-soft); color: var(--fx-bad); }
+  .arr { color: var(--fx-muted); font-weight: 700; }
+
+  /* sequence */
+  .seqwrap { background: var(--fx-card); border: 1px solid var(--fx-line); border-radius: 14px; padding: 10px; overflow-x: auto; }
+  #seq { display:block; width:100%; min-width:1060px; height:auto; }
+  #seq text { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 14px; color: var(--fx-muted); margin: 10px 4px 0; }
+  .legend span::before { content: ""; display: inline-block; width: 26px; height: 0; border-top: 2.5px solid currentColor; vertical-align: 4px; margin-right: 6px; }
+  .legend .l-voice { color: var(--fx-warn); } .legend .l-voice::before { border-top-style: dotted; }
+  .legend .l-http { color: var(--fx-blue); }
+  .legend .l-ret { color: var(--fx-muted); } .legend .l-ret::before { border-top-style: dashed; }
+
+  /* modules */
+  .mod h3 { font-family: var(--fx-mono); font-size: 15.5px; color: var(--fx-brand); }
+  .mod p { margin: 4px 0 0; font-size: 15px; }
+  .mod .why { color: var(--fx-muted); font-size: 14.5px; margin-top: 6px; }
+  .mod .why::before { content: "Why: "; font-weight: 700; color: var(--fx-ink); }
+  .layer { font-size: 12.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--fx-muted); margin: 18px 0 8px; }
+
+  /* tables */
+  table { width: 100%; border-collapse: collapse; background: var(--fx-card); border: 1px solid var(--fx-line); border-radius: 14px; overflow: hidden; }
+  th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--fx-line); vertical-align: top; font-size: 15px; }
+  th { background: var(--fx-brand-soft); color: var(--fx-brand); font-size: 13.5px; text-transform: uppercase; letter-spacing: 0.04em; }
+  tr:last-child td { border-bottom: 0; }
+  td.g { font-family: var(--fx-mono); font-weight: 700; white-space: nowrap; }
+  .reason { font-family: var(--fx-mono); font-size: 13px; color: var(--fx-bad); background: var(--fx-bad-soft); padding: 2px 6px; border-radius: 5px; display: inline-block; margin-top: 4px; }
+
+  /* sim vs live */
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 800px) { .cols { grid-template-columns: 1fr; } }
+  .cols ul { margin: 6px 0 0; padding-left: 20px; }
+  .cols li { margin: 5px 0; }
+  .live h3 { color: var(--fx-ok); } .simc h3 { color: var(--fx-sim); }
+  .ladder { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 14px; }
+  @media (max-width: 800px) { .ladder { grid-template-columns: 1fr; } }
+  .rung { border-radius: 12px; padding: 10px 12px; font-size: 14px; border: 1px solid var(--fx-line); background: var(--fx-card); }
+  .rung b { display: block; font-family: var(--fx-mono); }
+  .timeline { font-family: var(--fx-mono); font-size: 13px; }
+  .timeline td { padding: 6px 12px; font-size: 13px; }
+  .timeline .t { color: var(--fx-muted); white-space: nowrap; }
+
+  /* tech */
+  .tech .q { font-weight: 700; color: var(--fx-brand); font-size: 13.5px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .tech p { margin: 6px 0 0; font-size: 15px; }
+  .race { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; }
+  @media (max-width: 800px) { .race { grid-template-columns: 1fr; } }
+  pre { font-family: var(--fx-mono); font-size: 12.8px; line-height: 1.5; background: var(--fx-bg); border: 1px solid var(--fx-line); border-radius: 10px; padding: 10px 12px; margin: 8px 0 0; overflow-x: auto; white-space: pre; }
+
+  /* next */
+  .next .tag { float: right; }
+  .next ul { margin: 6px 0 0; padding-left: 20px; font-size: 15px; }
+  .bars { margin-top: 10px; }
+  .bar { display: grid; grid-template-columns: 120px 1fr 48px; gap: 8px; align-items: center; font-size: 13.5px; margin: 4px 0; }
+  .bar .track { height: 12px; background: var(--fx-bg); border-radius: 6px; overflow: hidden; border: 1px solid var(--fx-line); }
+  .bar .fill { height: 100%; background: var(--fx-brand); border-radius: 6px; transition: width 0.9s ease; }
+  .tiers { display: flex; gap: 6px; align-items: stretch; margin-top: 10px; flex-wrap: wrap; }
+  .tier { flex: 1; min-width: 150px; border: 1px solid var(--fx-line); border-radius: 10px; padding: 8px 10px; font-size: 13.5px; background: var(--fx-bg); }
+  .tier b { display: block; color: var(--fx-brand); }
+  button.small { font: inherit; font-size: 13.5px; padding: 4px 10px; border-radius: 8px; border: 1px solid var(--fx-brand); background: var(--fx-brand-soft); color: var(--fx-brand); cursor: pointer; font-weight: 600; }
+
+  /* Q&A */
+  details.qa { background: var(--fx-card); border: 1px solid var(--fx-line); border-radius: 12px; padding: 0; margin-bottom: 10px; }
+  details.qa summary { cursor: pointer; padding: 14px 18px; font-weight: 700; font-size: 17px; list-style: none; }
+  details.qa summary::-webkit-details-marker { display: none; }
+  details.qa summary::before { content: "＋"; color: var(--fx-brand); margin-right: 10px; font-weight: 800; }
+  details.qa[open] summary::before { content: "－"; }
+  details.qa .a { padding: 0 18px 16px 44px; }
+  details.qa .a p { margin: 0 0 6px; }
+  details.qa .a .dont { font-size: 14px; color: var(--fx-bad); }
+  .callout { border-left: 4px solid var(--fx-warn); background: var(--fx-warn-soft); padding: 12px 16px; border-radius: 0 12px 12px 0; margin: 14px 0; font-size: 15px; }
+  .callout b { color: var(--fx-warn); }
+  footer { color: var(--fx-muted); font-size: 14px; border-top: 1px solid var(--fx-line); padding-top: 16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <div class="logo">F</div>
+  <div>
+    <h1>How Fixie works</h1>
+    <p class="sub">Jianan's explainer for the 7:45 PM demo · c0mpiled-16 UCSD · built from the code in <code>server/src</code> and the real sim log</p>
+  </div>
+</header>
+
+<nav class="toc">
+  <a href="#story">1 · 30-second story</a>
+  <a href="#call">2 · What happens on a call</a>
+  <a href="#pieces">3 · The pieces</a>
+  <a href="#guards">4 · Guardrails</a>
+  <a href="#sim">5 · Sim vs live</a>
+  <a href="#tech">6 · Tech choices</a>
+  <a href="#next">7 · What's next</a>
+  <a href="#qa">8 · Judge questions</a>
+</nav>
+
+<!-- 1 -->
+<section id="story">
+  <h2><span class="n">1</span>The 30-second story</h2>
+  <p class="lede">Dorothy is 74. Her Whirlpool dryer runs, but the clothes come out cold. A tech visit costs about $200. The fix is a $9 thermal fuse and 15 minutes. She has a flip phone, and she never touches a screen.</p>
+  <div class="story">
+    <div class="beat"><div class="num">1</div><span class="em">☎️</span><b>She calls one number</b><p>Fixie says it's an AI and that the call is recorded. It gets her model number by voice and reads it back once. It names the part (WP3392519) and warns her the vent is clogged, which is a fire risk.</p></div>
+    <div class="beat"><div class="num">2</div><span class="em">📞📞📞📞</span><b>Four calls at once</b><p>After she hangs up, Fixie calls the warranty line and three parts counters in parallel. A tool call puts each quote on the board during the call.</p></div>
+    <div class="beat"><div class="num">3</div><span class="em">🛑</span><b>Code says no</b><p>Valley quotes $55 + $4. That's $59 landed, over her $40 cap, so it's rejected. Coast doesn't pick up, so it's skipped with no retry. The code decides both, not the model.</p></div>
+    <div class="beat"><div class="num">4</div><span class="em">🔁</span><b>Callback</b><p>Fixie calls back the number she called from: "You called at 7:46… $13.05, arrives Tuesday. Want me to order it?" Nothing happens until she says "order it."</p></div>
+    <div class="beat"><div class="num">5</div><span class="em">📦</span><b>Delivery day</b><p>A carrier webhook (simulated tonight) says the box arrived, and Fixie calls her again. The code won't let it reach "plug it back in" until she confirms the dryer is unplugged and the vent is cleared.</p></div>
+    <div class="beat"><div class="num">6</div><span class="em">🔥</span><b>"It's warm!"</b><p>Fixie records the fix as verified. That verified outcome is the data behind the long-term "fixed, or we pay the pro" story.</p></div>
+  </div>
+  <div class="numbers">
+    <div class="stat"><div class="v">$13.05</div><div class="k">PartsDirect landed ($9.10 + $3.95)</div></div>
+    <div class="stat"><div class="v">$186.95</div><div class="k">saved vs the $200 tech visit</div></div>
+    <div class="stat"><div class="v">$59 › $40</div><div class="k">Valley, rejected by the budget guard</div></div>
+    <div class="stat"><div class="v">0</div><div class="k">screens Dorothy touches</div></div>
+    <div class="stat"><div class="v">~11 s</div><div class="k">full NEW→FIXED loop in the sim log</div></div>
+  </div>
+  <p class="tagline">"Assistants tell you how to fix it. Fixie gets the part on its way, then walks you through installing it."</p>
+
+  <div class="card" style="margin-top:18px">
+    <h3>The job's life, as a state machine (<code>types.ts → JobState</code>)</h3>
+    <div class="flow">
+      <span class="st">NEW</span><span class="arr">→</span><span class="st">DIAGNOSED</span><span class="arr">→</span><span class="st">SOURCING</span><span class="arr">→</span><span class="st">AWAITING_CONFIRMATION</span><span class="arr">→</span><span class="st">ORDERED</span><span class="arr">→</span><span class="st">DELIVERED</span><span class="arr">→</span><span class="st">INSTALLING</span><span class="arr">→</span><span class="st term">FIXED</span>
+    </div>
+    <div class="flow" style="margin-top:8px">
+      <span style="color:var(--fx-muted);font-size:14px;margin-right:6px">Side exits:</span>
+      <span class="st exit">DECLINED</span><span style="font-size:14px;color:var(--fx-muted)">she says no</span>
+      <span class="st exit">ESCALATED</span><span style="font-size:14px;color:var(--fx-muted)">safety keyword, unknown model, no usable quote, 2 failed callbacks</span>
+      <span class="st exit">STOPPED</span><span style="font-size:14px;color:var(--fx-muted)">kill switch or agent-spend cap</span>
+      <span class="st term">NOTIFIED</span><span style="font-size:14px;color:var(--fx-muted)">enterprise end state (port fault)</span>
+    </div>
+    <p style="margin:10px 0 0;font-size:15px;color:var(--fx-muted)">Every arrow is one call to <code>jobs.transition(id, from, to)</code>, a synchronous compare-and-set. If the job isn't in <code>from</code>, the call returns false and changes nothing. That's why a trigger can fire twice safely.</p>
+  </div>
+</section>
+
+<!-- 2 -->
+<section id="call">
+  <h2><span class="n">2</span>What actually happens on a call</h2>
+  <p class="lede">Read top to bottom. The model talks; our server decides. Every arrow into the orchestrator goes through <code>/vapi/webhook</code>, which turns raw Vapi JSON into a small typed <code>CallEvent</code>. In sim mode, <code>vapi/sim.ts</code> POSTs the same Vapi-shaped JSON to the same webhook, so sim runs the real pipeline.</p>
+  <div class="seqwrap"><svg id="seq" role="img" aria-label="Sequence diagram of a full Fixie job"></svg></div>
+  <div class="legend">
+    <span class="l-voice">voice (audio on the phone line)</span>
+    <span class="l-http">HTTP / webhook / API</span>
+    <span class="l-ret">reply</span>
+  </div>
+</section>
+
+<!-- 3 -->
+<section id="pieces">
+  <h2><span class="n">3</span>The pieces</h2>
+  <p class="lede">About 2,500 lines of TypeScript on Node 22 and Express, run with <code>tsx</code>. Each module has one job. The arrows only go one way: Vapi → webhook → orchestrator → dialer → provider.</p>
+
+  <div class="layer">The edge: talking to Vapi</div>
+  <div class="grid g3">
+    <div class="card mod"><h3>vapi/webhook.ts</h3><p>The front door. Vapi POSTs every event here: tool calls, status updates, transcripts, and end-of-call reports. It checks the shared secret, works out which call the event is for, turns the JSON into a <code>CallEvent</code>, and hands it to the orchestrator. It always answers HTTP 200, and it answers tool calls in under 900 ms.</p><p class="why">Vapi's JSON is messy: arguments can be an object or a string, there are two tool lists, and fields go missing. All of that mess stays in this one file. If a tool reply is slow, the phone goes silent.</p></div>
+    <div class="card mod"><h3>vapi/assistants.ts</h3><p>Builds the assistant JSON for each call: model, tools, server URL plus secret (on the assistant <i>and</i> on every tool), max duration, and silence timeout. It deliberately leaves out voicemail detection.</p><p class="why">Each outbound call gets a fresh <b>transient</b> assistant with this job's facts baked in, so the supplier call already knows the part number.</p></div>
+    <div class="card mod"><h3>vapi/prompts.ts</h3><p>The system prompt and first message for each lane: intake, warranty, supplier, callback, delivery, and tech. They're written to be spoken, and every first message says "AI assistant… this call is recorded." Part numbers are spelled out in chunks ("W P 3, 3 9 2, 5 1 9").</p><p class="why">FCC 24-17 treats an AI voice as "artificial", and California PC 632 requires consent to record. The disclosure comes first on every call.</p></div>
+    <div class="card mod"><h3>vapi/client.ts</h3><p>Live provider. Places calls with <code>POST /call</code> and ends them through the call's <code>controlUrl</code>. On a 5xx it retries once after 2 s. On a 4xx it throws, and the dialer retries once after 5 s only if the error is a concurrency limit.</p><p class="why">Implements <code>VoiceProvider</code>, so the dialer never knows whether a call is real.</p></div>
+    <div class="card mod"><h3>vapi/sim.ts</h3><p>Sim provider. It pretends to be Vapi: it generates the exact webhook JSON a real call would produce and POSTs it to our own <code>/vapi/webhook</code>. Each roster entry has a persona (<code>quote:9.10:3.95…</code>, <code>no_answer</code>, <code>out_of_warranty</code>). It reads our tool replies back as the agent's next line.</p><p class="why">It's the dev harness, the regression test (<code>npm run demo:sim</code>), and the stage fallback, and it covers 100% of the server path.</p></div>
+    <div class="card mod"><h3>boot.ts + scripts/</h3><p><code>ensureInbound()</code> PATCHes the intake assistant's server URL to <code>PUBLIC_URL</code> on every boot. <code>setup-vapi</code> creates the assistant and attaches the number. <code>preflight</code> prints a ✅/❌ go/no-go table.</p><p class="why">The tunnel URL drifting is the classic way to kill a live demo.</p></div>
+  </div>
+
+  <div class="layer">The brain: decisions</div>
+  <div class="grid g3">
+    <div class="card mod"><h3>orchestrator.ts</h3><p>The lifecycle, about 740 lines. It handles each tool (<code>start_job</code>, <code>record_quote</code>, <code>record_order_decision</code>, <code>safety_ack</code>, <code>install_progress</code>, <code>report_fix</code>), decides when sourcing starts and when the callback fires, ranks quotes, manages timers, and runs the kill switch and the port-fault flow.</p><p class="why">It's the one place that knows the business process. It never sees raw Vapi JSON, and it never trusts a phone number or a price from the model.</p></div>
+    <div class="card mod"><h3>guards.ts</h3><p>Every guardrail as plain functions: <code>reserve</code>, <code>settle</code>, <code>checkQuote</code>, <code>checkStuck</code>, <code>checkSpend</code>, <code>canAdvanceInstall</code>, <code>safetyKeywords</code>. Each one returns a verdict with a deterministic, human-readable reason. They're unit-tested.</p><p class="why">"Enforced in code, not the prompt" is the Unsupervised-track claim. This file is the proof.</p></div>
+    <div class="card mod"><h3>dialer.ts</h3><p><b>The only place a call is placed.</b> It looks up the destination (a roster entry, or the job's own caller ID), runs <code>guards.reserve()</code> before the first <code>await</code>, picks live or sim per lane, and registers the call. It emits <code>call_started</code> with a masked phone number.</p><p class="why">One chokepoint means one place to audit. The LLM can't put a phone number in front of it.</p></div>
+    <div class="card mod"><h3>parts.ts</h3><p>The seeded catalog. It fuzzy-matches the model (edit distance ≤ 2, so "WED4851EW" still finds it), maps the symptom to a fault, and checks <code>isIdentical(partNumberSaid)</code> against the part number plus its cross-refs, with or without the "WP" prefix.</p><p class="why">"Same part?" is answered by code comparing strings, not by the model guessing.</p></div>
+  </div>
+
+  <div class="layer">The memory: state and contracts</div>
+  <div class="grid g3">
+    <div class="card mod"><h3>contracts.ts</h3><p>The frozen interfaces: <code>CallEvent</code>, <code>CallCtx</code>, <code>VoiceProvider</code>, <code>Guards</code>, <code>Jobs</code>, <code>Dialer</code>, and <code>Orchestrator</code>. Frozen at 2:50 PM.</p><p class="why">Four build agents coded against these at the same time without stepping on each other.</p></div>
+    <div class="card mod"><h3>types.ts</h3><p>Domain types: <code>Job</code>, <code>Quote</code> (with <code>landedTotal</code> and <code>rejectedReason</code>), <code>GuardVerdict</code>, and <code>FixieEvent</code> (with <code>simulated</code>).</p><p class="why"><code>identicalPart</code> is documented as "computed in code, never trusted from the LLM."</p></div>
+    <div class="card mod"><h3>jobs.ts · calls.ts</h3><p>The job store, with CAS transitions and an atomic snapshot to <code>data/jobs.json</code> (write a temp file, then rename). Also the call registry: which callId belongs to which job, lane, vendor, and epoch.</p><p class="why">The demo survives a server restart, and racing triggers can't double-fire.</p></div>
+    <div class="card mod"><h3>events.ts</h3><p>The event bus. Every <code>emit()</code> gets a monotonic id, is appended to <code>events.jsonl</code>, and is pushed over SSE <code>/events</code>, with replay from Last-Event-ID. <code>maskPhone()</code> turns numbers into <code>···0142</code>.</p><p class="why">One stream drives the board, the replay, and the audit log.</p></div>
+    <div class="card mod"><h3>config.ts</h3><p>Every cap and timer comes from env vars with demo defaults. It also holds the per-lane <code>live|sim</code> mode (switchable at runtime with <code>POST /demo/mode</code>), the demo epoch, and the admin token.</p><p class="why">Per-lane mode is what makes the fallback ladder possible.</p></div>
+    <div class="card mod"><h3>routes.ts</h3><p>Admin routes behind the <code>x-admin</code> header: <code>/simulate/delivered</code>, <code>/fault</code>, <code>/jobs/:id/stop</code>, <code>/demo/reset</code>, <code>/demo/mode</code>, <code>/demo/sim-intake</code>. Public routes: <code>/jobs</code> with masked phones.</p><p class="why">The server sits on a public tunnel, so a stranger mustn't be able to fire the port fault or stop a job.</p></div>
+  </div>
+
+  <div class="layer">The surfaces (judges and family, never Dorothy)</div>
+  <div class="grid g3">
+    <div class="card mod"><h3>web/ (judge board)</h3><p>The "OPERATOR AUDIT VIEW": call lanes with live transcripts, a quote table with rejected rows struck through, the guard ticker, meters, two savings counters, and a SIMULATED badge. Hidden hotkeys: D (delivery), P (port fault), X (kill switch).</p><p class="why">Judges can't hear four phone calls at once, so the board makes the invisible work visible.</p></div>
+    <div class="card mod"><h3>site/ (website + dashboard)</h3><p>A Next.js site with sign-in and a <code>/dashboard</code> where a caregiver or operator can see jobs and stop one.</p><p class="why">Family members want to watch over the job. Dorothy still never needs it.</p></div>
+    <div class="card mod"><h3>vision/ (in progress)</h3><p>"Can I take a look?": an optional photo of the nameplate, receipt, or part label, processed in three tiers. Images stay in memory only, with a 1-hour TTL.</p><p class="why">Reading a model number aloud is the weakest link in voice. See §7.</p></div>
+  </div>
+</section>
+
+<!-- 4 -->
+<section id="guards">
+  <h2><span class="n">4</span>Guardrails</h2>
+  <p class="lede">The agent proposes and the code approves. Every trip emits a <code>guard</code> event whose <code>reason</code> string is built by code, so judges read the same sentence every run. Defaults come from <code>config.ts</code> and are env-tunable.</p>
+  <table>
+    <thead><tr><th style="width:15%">Guard</th><th style="width:33%">Rule (in code)</th><th style="width:34%">Why it matters</th><th style="width:18%">On stage?</th></tr></thead>
+    <tbody>
+      <tr><td class="g">budget</td><td>Quote's <b>landed total</b> (price + shipping) ≤ $40 for consumers, $1,500 for enterprise. <code>checkQuote</code> runs on every <code>record_quote</code>.<br><span class="reason">Valley Appliance Parts quoted $59.00 landed. Over the $40 budget, skipped.</span></td><td>The model can't talk itself into a pricey part. Shipping counts, because $9 + $50 shipping isn't cheap.</td><td><span class="pill p-bad">TRIPS: Valley</span></td></tr>
+      <tr><td class="g">no_answer / voicemail</td><td><code>endedReason</code> (<code>customer-did-not-answer</code>, <code>customer-busy</code>, <code>voicemail</code>) maps to a skip. <b>Never retry.</b></td><td>No robocall loops at a business that doesn't want us. Voicemail detection (AMD) is off because it hangs up on real people. Vapi's ended reason is used instead.</td><td><span class="pill p-bad">TRIPS: Coast</span></td></tr>
+      <tr><td class="g">install safety</td><td><code>canAdvanceInstall</code>: from step 2 on, the <code>unplugged</code> ack is required. The "plug in / restore power" step also needs <code>vent_cleared</code>. A blocked step returns "First confirm…" to the agent.</td><td>A blown fuse usually means a clogged vent, which is a fire risk. The model can't skip ahead to "plug it back in."</td><td><span class="pill p-bad">TRIPS: delivery call</span></td></tr>
+      <tr><td class="g">agent spend</td><td>The sum of Vapi <code>cost</code> across the job's calls must stay ≤ $3. If it goes over, the job is STOPPED and every live call is ended.</td><td>Fixie's own bill is capped too, not just Dorothy's.</td><td><span class="pill p-warn">meter visible</span></td></tr>
+      <tr><td class="g">kill switch</td><td><code>POST /jobs/:id/stop</code> (hotkey X) does CAS to STOPPED <b>and</b> calls <code>endCall</code> on every live call. If a call gets dialed after the stop, the dialer hangs it up right away.</td><td>An unsupervised agent needs an off button that actually ends the calls.</td><td><span class="pill p-warn">Q&amp;A only</span></td></tr>
+      <tr><td class="g">vendor allow-list</td><td>The destination must be a roster number or the job's own caller ID. The dialer gets it from the roster, never from model output, and <code>start_job</code> has no phone argument.</td><td>The model mishearing a digit, or someone saying "call my number, 555…", can't make Fixie dial a stranger.</td><td><span class="pill p-blue">unit-tested</span></td></tr>
+      <tr><td class="g">max_calls · loop · minutes</td><td>≤ 8 warranty/supplier calls per job. ≤ 2 calls to the same vendor. ≤ 20 reserved minutes (each call reserves its max length, trued up when it ends). Calls to Dorothy and the tech are exempt but capped at 2 attempts.</td><td>Stops runaway fan-out. <code>reserve()</code> is synchronous, so parallel dials can't race past the cap.</td><td><span class="pill p-blue">unit-tested</span></td></tr>
+      <tr><td class="g">stuck</td><td>Every 5 s, any live supplier or warranty call with no quote after <code>stuckSeconds</code> (35 s default, env-tunable) gets hung up.</td><td>A counter that says "hold please" forever can't burn minutes.</td><td><span class="pill p-blue">unit-tested</span></td></tr>
+      <tr><td class="g">identical / in stock</td><td><code>isIdentical(partNumberSaid)</code> compares the part number the supplier read back with WP3392519 and its cross-refs. Out of stock means skipped.</td><td>A cheaper wrong part is worse than no part.</td><td><span class="pill p-sim">seen in the sim port run</span></td></tr>
+      <tr><td class="g">safety keywords</td><td>A regex for smoke, burning, sparks, gas smell, or fire sends the job to <code>pro_required</code> and ESCALATED. Smoke, gas, or fire gets "leave the house and call 911." It checks the symptom and the live transcripts.</td><td>Fixie never coaches a gas repair.</td><td><span class="pill p-blue">unit-tested</span></td></tr>
+      <tr><td class="g">consent</td><td>If <code>consentCallback</code> is false, there's no callback. The first message asks for consent.</td><td>TCPA and CA PC 632, and it's polite.</td><td><span class="pill p-ok">spoken at intake</span></td></tr>
+    </tbody>
+  </table>
+  <div class="callout"><b>The line to say:</b> "Two guards trip live on stage: Valley's $59 quote is over the $40 cap, and Coast doesn't answer. The install gate holds 'plug it back in' until she confirms unplugged and vent cleared. The rest are unit-tested, and the kill switch is one keypress."</div>
+</section>
+
+<!-- 5 -->
+<section id="sim">
+  <h2><span class="n">5</span>Sim vs live</h2>
+  <p class="lede">Be precise about this before a judge asks. Every simulated event carries <code>simulated: true</code>, and the board shows an amber SIMULATED badge.</p>
+  <div class="cols">
+    <div class="card live">
+      <h3>Real tonight</h3>
+      <ul>
+        <li>Dorothy's call over the real phone network: phone → Twilio number → Vapi intake assistant (Claude).</li>
+        <li>Real outbound calls to real phones held by teammates and friends, placed in parallel.</li>
+        <li>Quote capture through in-call tool calls, the part-number check, landed-total ranking, and every guard.</li>
+        <li>The callback to the caller-ID number, and the "order it" decision.</li>
+        <li>The delivery call and the install gate.</li>
+        <li>The event stream, the board, the kill switch, and the spend meter.</li>
+      </ul>
+    </div>
+    <div class="card simc">
+      <h3>Simulated or mocked, and said out loud</h3>
+      <ul>
+        <li><b>The suppliers are friends.</b> Their prices are role-play numbers taken from real listings.</li>
+        <li><b>The order is mocked.</b> No money moves. <code>order_confirmed</code> carries <code>mockOrder: true</code>.</li>
+        <li><b>The delivery webhook</b> is fired by a hotkey and shaped like a carrier webhook (<code>simulatedWebhook: true</code>).</li>
+        <li><b>The port fault</b> is sim-only and labeled "simulated Samsara webhook."</li>
+        <li><b>The catalog is seeded</b>; there's no learned parts graph. The diagnosis confidence (0.82) is labeled "lookup prior."</li>
+      </ul>
+    </div>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <h3>Why this is honest, not a fake demo</h3>
+    <p style="margin:4px 0 0;font-size:15.5px">The sim doesn't skip anything. It POSTs the same Vapi-shaped JSON into the same <code>/vapi/webhook</code>, so the orchestrator, guards, ranking, and CAS states can't tell the difference. When a lane is in sim, only the voices are fake; the decisions are the same code. We say "friends are playing the counters" in the first 10 seconds, before anyone asks.</p>
+    <div class="ladder">
+      <div class="rung"><b>L0</b>All live.</div>
+      <div class="rung"><b>L1</b>One call doesn't ring within 10 s: flip that lane to sim.</div>
+      <div class="rung"><b>L2</b>Two calls fail: suppliers to sim. Dorothy's calls stay live.</div>
+      <div class="rung"><b>L3</b>Tunnel or intake dead: all sim, with the badge.</div>
+      <div class="rung"><b>L4</b>Backup video, plus a replay of a recorded <code>events.jsonl</code>.</div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <h3>From the real event log (<code>web/sample-real-sim-run.jsonl</code>, job_1)</h3>
+    <p style="margin:2px 0 8px;font-size:14.5px;color:var(--fx-muted)">370 events across five runs: three dryer jobs to FIXED, two kill-switch tests, and two port-fault runs. The first dryer run went NEW→FIXED in about 11 seconds of sim time.</p>
+    <table class="timeline">
+      <tbody>
+        <tr><td class="t">21:55:39</td><td>#7 diagnosis · Blown thermal fuse · 0.82 "lookup prior"</td></tr>
+        <tr><td class="t">21:55:39</td><td>#10 NEW→DIAGNOSED · #13 DIAGNOSED→SOURCING (intake ended)</td></tr>
+        <tr><td class="t">21:55:40</td><td>#14–18 call_started ×4: warranty, Valley, PartsDirect, Coast (300 ms stagger)</td></tr>
+        <tr><td class="t">21:55:41</td><td>#25 warranty · covered:false · "Purchased 2019; 1-year parts warranty expired"</td></tr>
+        <tr><td class="t">21:55:42</td><td><span style="color:var(--fx-bad)">#33 guard budget · "Valley Appliance Parts quoted $59.00 landed. Over the $40 budget, skipped."</span></td></tr>
+        <tr><td class="t">21:55:42</td><td>#36 quote · PartsDirect $9.10 + $3.95 = $13.05, identical part</td></tr>
+        <tr><td class="t">21:55:42</td><td><span style="color:var(--fx-bad)">#40 guard no_answer · "Coast Supply didn't answer. Skipped, no retry."</span></td></tr>
+        <tr><td class="t">21:55:42</td><td>#44 SOURCING→AWAITING_CONFIRMATION · #45 best_deal: saves $186.95 vs tech, $45.95 vs Valley</td></tr>
+        <tr><td class="t">21:55:44</td><td>#54 →ORDERED · #55 order_confirmed · confirmedBy "voice" · mockOrder true</td></tr>
+        <tr><td class="t">21:55:45</td><td>#57 →DELIVERED · delivery call · #65, #68 safety_ack unplugged, vent_cleared</td></tr>
+        <tr><td class="t">21:55:49</td><td>#75 install_step 4 → #80 step 7 (others marked skipped) · #83 →FIXED · #84 fix_verified</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- 6 -->
+<section id="tech">
+  <h2><span class="n">6</span>The tech choices, and why</h2>
+  <div class="grid g2 tech">
+    <div class="card"><div class="q">Vapi</div><h3>Voice orchestration, not ours to build</h3><p>Vapi runs the hard real-time loop: phone audio → speech-to-text → LLM → text-to-speech, with barge-in and turn-taking. It calls our server for each tool call. <b>Transient assistants</b> let each outbound call carry its own prompt (this part number, this customer, this price). Building that audio pipeline ourselves would have eaten the whole hackathon.</p></div>
+    <div class="card"><div class="q">Twilio</div><h3>A real phone number</h3><p>We use a paid Twilio number imported into Vapi, because free Vapi numbers can't place outbound calls. A real phone-network number is the whole No App story: Dorothy can use a landline or a flip phone, with nothing to install and no account to make.</p></div>
+    <div class="card"><div class="q">Claude, two tiers</div><h3>Sonnet for Dorothy, Haiku for the counters</h3><p><b>Sonnet</b> runs the intake, callback, and delivery calls, which are long, open-ended, need empathy, and have to follow a multi-step install. <b>Haiku 5.5</b> runs the warranty, supplier, and tech calls, which are short and scripted, run many at once, and where speed and cost matter most. Either way, the model's only job is to talk and call tools. It doesn't make the decisions.</p></div>
+    <div class="card"><div class="q">cloudflared</div><h3>A public URL for the webhooks</h3><p>Vapi has to reach our laptop over HTTPS. We run one long-lived quick tunnel, so restarting the server doesn't change the URL. On boot, <code>ensureInbound()</code> PATCHes the intake assistant to the current <code>PUBLIC_URL</code>, and <code>preflight</code> checks that they match. We run <code>npm start</code>, never <code>dev</code>, because file-watch restarts would wipe state mid-demo.</p></div>
+    <div class="card" style="grid-column: 1 / -1"><div class="q">Frozen contracts</div><h3>How four build agents worked in parallel</h3><p>At 2:50 PM, <code>contracts.ts</code> froze the seams between modules. Each workstream got its own files and coded against interfaces it couldn't change: WS-1 engine core (guards, parts, jobs, calls), WS-2 orchestrator (dialer, lifecycle, routes), WS-3 Vapi live (client, assistants, prompts, webhook), and WS-4 simulator. The key choice was <code>VoiceProvider</code>: live and sim implement the same two methods, so the simulator could be built and tested without anyone having Vapi keys. And because <code>CallRequest</code> deliberately has <b>no <code>to</code> field</b>, the type system makes "the orchestrator picks a phone number" impossible.</p>
+<pre>interface VoiceProvider { createCall(req): Promise&lt;{callId}&gt;; endCall(call): Promise&lt;void&gt; }
+interface CallRequest  { lane: Lane; vendorId?: string; maxSec: number }   // no `to`: the dialer resolves it
+type CallEvent = {kind:'tool'…} | {kind:'status'…} | {kind:'transcript'…} | {kind:'ended'…}</pre></div>
+    <div class="card" style="grid-column: 1 / -1"><div class="q">Synchronous guard reservation</div><h3>Why <code>reserve()</code> runs before the first <code>await</code></h3><p>Node runs one piece of JavaScript at a time and only switches tasks at an <code>await</code>. If the check were async ("look up the count, then dial, then increment"), four parallel dials could each read "7 of 8 used," all pass, and place 11 calls. That's the classic check-then-act race. Instead, <code>reserve()</code> checks <b>and</b> increments the counters in one synchronous step, so each dial sees the previous one's reservation. When a call ends, <code>settle()</code> corrects the minutes to what was actually used.</p>
+      <div class="race">
+<pre style="border-color:var(--fx-bad)">// ❌ racy
+const ok = await canPlaceCall(job)   // 4 dials all read 7/8
+if (ok) { await vapi.createCall(); job.calls++ }</pre>
+<pre style="border-color:var(--fx-ok)">// ✅ dialer.ts
+const v = guards.reserve(job, req)   // sync: check + increment
+if (!v.ok) return emitGuard(v)
+await provider.createCall(...)       // first await comes after</pre>
+      </div></div>
+    <div class="card" style="grid-column: 1 / -1"><div class="q">CAS state transitions</div><h3>One winner, every race</h3><p>Lots of things can trigger the same step. Sourcing starts on whichever comes first: the intake call's <code>status: ended</code>, its end-of-call report, or a 25 s fallback timer after <code>start_job</code>. The callback fires on whichever comes first: all sourcing calls ended, the warranty plus 2 suppliers ended with a usable quote, or a 75 s timeout. Each path calls <code>jobs.transition(id, 'SOURCING', 'AWAITING_CONFIRMATION')</code>. The first one flips the state and gets <code>true</code>. Everyone else gets <code>false</code> and does nothing. So Dorothy can never get two callbacks. The same idea is behind tool-call dedupe by <code>toolCallId</code> and dropping webhooks from an older demo <b>epoch</b> after <code>/demo/reset</code>.</p></div>
+  </div>
+</section>
+
+<!-- 7 -->
+<section id="next">
+  <h2><span class="n">7</span>What's next</h2>
+  <div class="grid g2 next">
+    <div class="card">
+      <span class="pill p-brand tag">#11</span>
+      <h3>Bayesian multimeter diagnosis</h3>
+      <p style="margin:4px 0 0;font-size:15px">Today's diagnosis is a catalog lookup. Next, Fixie forms hypotheses and visibly changes its mind. A hand-written fault tree for "electric dryer, no heat" gives priors. Each safe test (breaker check, then fuse continuity <i>while unplugged</i>) updates the posterior with Bayes' rule. The next test is the one with the most information gain per unit of safety cost. <code>start_job</code> fires once the top hypothesis is ≥ 0.85. An ambiguous reading counts as "unknown," and two unknowns escalate to a pro. The groundwork is already in the code: <code>record_test</code> is in <code>ToolName</code> and <code>Job.diagnosis</code> exists.</p>
+      <div class="bars" id="bars"></div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:6px"><button class="small" id="btnTest">Run "fuse continuity: open"</button><button class="small" id="btnReset">Reset priors</button><span id="barReason" class="mono" style="font-size:12.5px;color:var(--fx-muted)"></span></div>
+      <p style="font-size:13.5px;color:var(--fx-muted);margin:8px 0 0">Say on stage: "The likelihoods are expert-written, not learned. Every confirmed fix tunes them."</p>
+    </div>
+    <div class="card">
+      <span class="pill p-brand tag">#12</span>
+      <h3>The proof panel: "agent proposes, code approves"</h3>
+      <ul>
+        <li>Every decision event carries <code>approvedBy: "code" | "user_voice" | "caregiver"</code> and a deterministic reason.</li>
+        <li>An always-visible strip shows calls N/8, minutes, $ committed vs the cap, and guards fired.</li>
+        <li>A scrolling decision log shows the agent's proposal, then ✅ or ⛔, with the rule that decided.</li>
+        <li>A staged runaway: a "Hold Forever" supplier trips the stuck guard, then STOP is pressed live.</li>
+        <li>A judge-callable number on the last slide, with a per-caller cap (≤ 1 job, ≤ 3 calls, roster-only).</li>
+      </ul>
+      <p style="font-size:14px;color:var(--fx-muted);margin:8px 0 0">Why: judges have seen 50 "Vapi + Twilio + prompt" demos. The 2026 agent-commerce winners (AgentPay, NextWave) made the approval layer the headline.</p>
+    </div>
+    <div class="card">
+      <span class="pill p-brand tag">vision/</span>
+      <h3>Visual inspection: "Can I take a look?"</h3>
+      <p style="margin:4px 0 0;font-size:15px">This is optional and never required, because of the No App rule. Fixie reads out a 4-digit code or texts a link. A family member, or Dorothy by MMS, points a camera at the nameplate, receipt, or part label.</p>
+      <div class="tiers">
+        <div class="tier"><b>Tier 1 · in the browser</b>Scores sharpness, glare, text, and stability, and auto-captures the best frame. Costs nothing.</div>
+        <div class="tier"><b>Tier 2 · cheap classifier</b>Ranks the images by kind (nameplate, receipt, part label, appliance) on a thumbnail.</div>
+        <div class="tier"><b>Tier 3 · Claude vision</b>Reads the model, purchase date, or part number from the best image plus a zoomed crop.</div>
+      </div>
+      <p style="font-size:14px;color:var(--fx-muted);margin:8px 0 0">It stops early once each goal (model, purchase date) is confident. Images live in memory only, up to 16 per session, and are dropped after 1 hour or on reset. Why: a misheard model number is the weakest link in a voice-only flow.</p>
+    </div>
+    <div class="card">
+      <span class="pill p-brand tag">site/</span>
+      <h3>Website and caregiver portal</h3>
+      <ul>
+        <li>A Next.js site with sign-in and a <code>/dashboard</code> of jobs: state, transcripts, and the quote table.</li>
+        <li>A stop button that works: a caregiver or operator can stop any job, which ends every live call.</li>
+        <li>Caregiver co-sign over $50 (#13): the order is held until the daughter texts back YES (<code>guard{cosign, held}</code>).</li>
+        <li>A caregiver closing call (#8): "Your mom's dryer is fixed. $13 instead of $200."</li>
+      </ul>
+      <p style="font-size:14px;color:var(--fx-muted);margin:8px 0 0">The portal is for the family. Dorothy's interface is still just the phone.</p>
+    </div>
+    <div class="card" style="grid-column: 1 / -1">
+      <span class="pill p-brand tag">enterprise</span>
+      <h3>Same engine: ports, fleets, defense facilities</h3>
+      <div class="grid g3" style="margin-top:8px">
+        <div><b>⚓ Ports</b><p style="font-size:14.5px;margin:4px 0 0">Terminal tractor YT-07 at the Port of San Diego throws J1939 <code>SPN 3226 FMI 4</code>, a NOx sensor fault. <code>POST /fault</code> runs the decode, then <code>pro_required</code> ("certified tech only"), sourcing against a $1,500 cap, and a call to the yard tech that ends in NOTIFIED. Crane downtime is an estimated $5k–50k+ per hour (vendor figure). <i>Sim-only tonight.</i></p></div>
+        <div><b>🚚 Fleets</b><p style="font-size:14.5px;margin:4px 0 0">A telematics fault (Samsara-style <code>DeviceHasVehicleFault</code>) triggers sourcing before the truck is back in the yard. Samsara and Konecranes stop at dashboards and work orders. Nobody phones the parts counter.</p></div>
+        <div><b>🪖 Defense facilities</b><p style="font-size:14.5px;margin:4px 0 0">The Army created an HVAC repair task force on Oct 15, 2026. Base HVAC uses off-the-shelf parts, so ITAR doesn't apply. Vapi and Twilio aren't FedRAMP-authorized, so pitch installation facilities only, not weapons systems.</p></div>
+      </div>
+      <p style="font-size:14px;color:var(--fx-muted);margin:10px 0 0">Line: "Dorothy needs no screen. The tech needs no hands. Same engine."</p>
+    </div>
+  </div>
+</section>
+
+<!-- 8 -->
+<section id="qa">
+  <h2><span class="n">8</span>Likely judge questions</h2>
+  <p class="lede">Each answer takes about 15 seconds. Concede what's true, then pivot to the closed loop and the code-enforced guardrails. Click to open.</p>
+
+  <details class="qa"><summary>"Google's AI already calls businesses."</summary><div class="a"><p>It does, and we never say otherwise. Google calls local services from Search and texts or emails you a summary. Fixie starts from <b>any phone</b>, not Search. It calls <b>distributors by part number</b>, gates safety, closes on a <b>spoken yes</b>, and calls back on delivery day to coach the install and confirm the fix. Google gathers quotes; we finish the job.</p><p class="dont">Never say: "Google can't call businesses."</p></div></details>
+
+  <details class="qa"><summary>"Isn't this just OpenClaw with a phone skill?"</summary><div class="a"><p>Yes, OpenClaw can place these calls. Calling is plumbing, and we'd use it as a commodity layer. What a personal agent won't do is take a call from a 74-year-old with a flip phone, refuse the gas repair, enforce spend limits it can't override, and call back to check the fix worked. That check is the outcome data that lets us guarantee repairs.</p><p class="dont">Never say: "OpenClaw can't."</p></div></details>
+
+  <details class="qa"><summary>"What about liability? A 74-year-old doing electrical work?"</summary><div class="a"><p>We only coach unplug-and-swap repairs. The safety level comes from the catalog, not the model. Gas, smoke, sparks, or high voltage go to a pro or to 911, enforced in code. The install can't reach "plug it back in" until she's confirmed it's unplugged and the vent is cleared. Every call is recorded. Long term, it's a capped "fixed, or we pay the pro" guarantee through a licensed carrier. Tonight that pricing is simulated.</p></div></details>
+
+  <details class="qa"><summary>"Who pays?"</summary><div class="a"><p>Mostly not Dorothy. The buyer is whoever pays for the repair. Home-warranty companies and insurers pay per resolved case, and a $13 part beats a $200 truck roll on their books. Then fleets, ports, and base facilities, all on the same engine. An affiliate cut on parts covers the consumer line.</p></div></details>
+
+  <details class="qa"><summary>"Seniors get scammed by phone. Isn't this a scam vector?"</summary><div class="a"><p>We designed for it. Adults 60+ lost $3B to fraud in 2025. Fixie only calls back <b>the number that called in</b>: caller ID, never a number the model heard. It opens with "the AI assistant you called at 7:46 about your dryer." It never asks for a card number, payment, or address by voice. And every call starts with "I'm an AI, this call is recorded."</p></div></details>
+
+  <details class="qa"><summary>"Will real suppliers even talk to a bot?"</summary><div class="a"><p>Some won't, and that's built in. A refusal or no-answer is a guard: skipped, no retry, and the other counters still quote. That's Coast on stage. The call discloses up front, asks about one part number, and takes about 20 seconds. Workd already sells voice parts lookup to HVAC distributors. <i>(If Lane B called a real San Diego counter today, cite that result first.)</i></p></div></details>
+
+  <details class="qa"><summary>"The No App track says no screens. Isn't the board a screen?"</summary><div class="a"><p>The board is the <b>operator audit view</b>, for you, the judges. Dorothy never sees it. Her whole interface is: dial, talk, hang up, pick up. The delivery trigger is a hidden hotkey, not a button she presses. The photo by text and the caregiver portal are optional extras for family, never required.</p></div></details>
+
+  <details class="qa"><summary>"Were the suppliers staged?"</summary><div class="a"><p>Yes. Friends played the counters, so we don't cold-call real businesses at a hackathon, and the prices come from real listings. The calls, the quote extraction, the part-number check, the ranking, and the guards are all live code. We say so in the first 10 seconds.</p></div></details>
+
+  <details class="qa"><summary>"Why trust an AI to spend money?"</summary><div class="a"><p>We don't trust the AI; we trust the code around it. The model can't choose a phone number (the dialer has no <code>to</code> input), can't set the price (the order uses the server's ranked quote, never the tool's arguments), and can't exceed the caps. Nothing is ordered without the words "order it." Tonight the checkout is mocked. <i>(Press X to show the kill switch.)</i></p></div></details>
+
+  <details class="qa"><summary>"Voice agents are a commodity. What's the moat?"</summary><div class="a"><p>The voice agent is the commodity. The moat is the loop's data: model → part → cross-refs → price and stock per counter, plus <b>verified-fix outcomes</b> from the delivery callback. A personal agent never collects that, and we can underwrite a guarantee against it. It's seeded today, and we say so.</p></div></details>
+
+  <details class="qa"><summary>"What if the diagnosis is wrong?"</summary><div class="a"><p>A $13 part is the cheapest wrong guess in the house. The delivery call verifies the fix by voice ("Is it warm?"). If it isn't, the job escalates to an install-only pro. Next is #11: live multimeter tests that move the probability before we buy anything.</p></div></details>
+</section>
+
+<footer>
+  Sources: README.md, docs/SPEC.md, docs/PR.md, HANDOFF.md, docs/review/SYNTHESIS.md, docs/issues/00–14, research/round2/POSITIONING.md, research/round3/SYNTHESIS.md, server/src (contracts, types, guards, dialer, orchestrator, vapi/*), web/sample-real-sim-run.jsonl. Cap values are the <code>config.ts</code> defaults; the demo <code>.env</code> may override them.
+</footer>
+</div>
+
+<script>
+// ---------- sequence diagram ----------
+(function () {
+  const css = getComputedStyle(document.documentElement);
+  const C = (v) => css.getPropertyValue(v).trim();
+  const actors = [
+    { id: 'D', name: "Dorothy's phone", sub: 'any phone, no app', icon: '👵' },
+    { id: 'T', name: 'Twilio', sub: 'paid US number', icon: '☎️' },
+    { id: 'V', name: 'Vapi', sub: 'STT · Claude · TTS', icon: '🎙️' },
+    { id: 'W', name: '/vapi/webhook', sub: 'normalize → CallEvent', icon: '🚪' },
+    { id: 'O', name: 'orchestrator', sub: 'lifecycle + CAS', icon: '🧠' },
+    { id: 'G', name: 'dialer + guards', sub: 'reserve() sync', icon: '🛡️' },
+    { id: 'S', name: 'Suppliers ×4', sub: 'warranty + 3 counters', icon: '🏪' },
+    { id: 'B', name: 'Judge board', sub: 'SSE /events', icon: '📺' },
+  ];
+  // kind: v = voice, h = http, r = reply, self = note box, phase = band
+  const M = [
+    { phase: '① Intake: Dorothy calls in (Sonnet assistant "Fixie Intake")' },
+    ['D', 'T', 'dials the Fixie number', 'v'],
+    ['T', 'V', 'inbound call → persistent intake assistant', 'h'],
+    ['V', 'D', '"Hi, I\'m Fixie, an AI assistant. This call is recorded. OK to call you back?"', 'v'],
+    ['D', 'V', '"Dryer runs, no heat. Whirlpool W-E-D-4-8-1-5-E-W, bought 2019."', 'v'],
+    ['V', 'W', 'tool-calls: start_job{model, symptom, consent}  (+ call.customer.number)', 'h'],
+    ['W', 'O', 'CallEvent{kind:"tool"}; no phone arg, caller ID only', 'h'],
+    { self: 'O', text: 'parts.lookup → WP3392519 · safetyKeywords ok · CAS NEW→DIAGNOSED' },
+    ['O', 'B', 'consent · diagnosis · safety · part_identified', 'h'],
+    ['O', 'V', 'reply < 900 ms: "Most likely a blown thermal fuse… vent is clogged…"', 'r'],
+    ['V', 'D', 'speaks it, "I\'ll call you back on this number", hangs up', 'v'],
+    ['V', 'W', 'status-update: ended', 'h'],
+    { self: 'O', text: 'first of {ended, end-of-call report, 25 s fallback} → CAS DIAGNOSED→SOURCING' },
+    { phase: '② Sourcing: four calls in parallel (Haiku transient assistants)' },
+    ['O', 'G', 'placeGuardedCall() ×4, staggered 300 ms', 'h'],
+    { self: 'G', text: 'reserve(): roster-only number · ≤8 calls · ≤2/vendor · ≤20 min. Sync, before await' },
+    ['G', 'V', 'POST /call · name "job_1|valley|supplier" · assistant w/ part number baked in', 'h'],
+    ['V', 'S', 'rings warranty, PartsDirect, Valley, Coast via Twilio', 'v'],
+    ['S', 'V', 'Warranty: "Out of warranty, 2019." · PartsDirect: "$9.10 + $3.95, in stock, Tuesday"', 'v'],
+    ['V', 'W', 'tool-calls: record_warranty · record_quote{price, shipping, partNumberSaid}', 'h'],
+    { self: 'O', text: 'landedTotal = price + shipping · isIdentical(partNumberSaid) · checkQuote' },
+    ['O', 'B', '⛔ guard budget: "Valley quoted $59.00 landed. Over the $40 budget, skipped."', 'h', 'bad'],
+    ['V', 'W', 'end-of-call-report: Coast, endedReason "customer-did-not-answer"', 'h'],
+    ['O', 'B', '⛔ guard no_answer: "Coast Supply didn\'t answer. Skipped, no retry."', 'h', 'bad'],
+    { self: 'O', text: 'warranty + 2 suppliers ended → CAS SOURCING→AWAITING_CONFIRMATION · rank → $13.05' },
+    { phase: '③ Callback: the spoken yes (Sonnet)' },
+    ['O', 'G', 'placeGuardedCall(lane:"user"); to = job.customer.phone (caller ID)', 'h'],
+    ['G', 'V', 'POST /call · callback assistant (price from server bestDeal)', 'h'],
+    ['V', 'D', '"Hi Dorothy, it\'s Fixie, the AI you called at 7:46… $13.05, Tuesday. Want me to order it?"', 'v'],
+    ['D', 'V', '"Order it."', 'v'],
+    ['V', 'W', 'tool-calls: record_order_decision{approved:true}', 'h'],
+    { self: 'O', text: 'uses server bestDeal (never tool args) · CAS →ORDERED · order_confirmed (mock)' },
+    { phase: '④ Delivery day: install coaching (Sonnet)' },
+    ['B', 'O', 'hotkey D → POST /simulate/delivered (carrier-shaped webhook, simulated)', 'h'],
+    { self: 'O', text: 'CAS ORDERED→DELIVERED → placeGuardedCall(lane:"delivery")' },
+    ['V', 'D', '"Your thermal fuse was delivered. Is the dryer unplugged?"', 'v'],
+    ['D', 'V', '"It\'s unplugged, vent\'s clear, panel\'s off."', 'v'],
+    ['V', 'W', 'safety_ack ×2 · install_progress{step}', 'h'],
+    { self: 'O', text: 'canAdvanceInstall: no "plug in" step until unplugged + vent_cleared' },
+    ['D', 'V', '"It\'s warm!"', 'v'],
+    ['V', 'W', 'report_fix{ok:true} → CAS INSTALLING→FIXED · fix_verified', 'h', 'ok'],
+  ];
+
+  const W = 1160, top = 92, row = 33, phaseH = 34, colW = W / actors.length;
+  const x = {}; actors.forEach((a, i) => (x[a.id] = colW * i + colW / 2));
+  let y = top + 10;
+  const items = [];
+  for (const m of M) {
+    if (m.phase) { items.push({ t: 'phase', y, text: m.phase }); y += phaseH; continue; }
+    if (m.self) { items.push({ t: 'self', y, a: m.self, text: m.text }); y += row; continue; }
+    items.push({ t: 'msg', y, from: m[0], to: m[1], text: m[2], kind: m[3], tone: m[4] }); y += row;
+  }
+  const H = y + 24;
+  const svg = document.getElementById('seq');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  const ns = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs, text) => { const e = document.createElementNS(ns, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; svg.appendChild(e); return e; };
+
+  const defs = document.createElementNS(ns, 'defs'); svg.appendChild(defs);
+  const mk = (id, color) => { const m = document.createElementNS(ns, 'marker'); m.setAttribute('id', id); m.setAttribute('viewBox', '0 0 10 10'); m.setAttribute('refX', '9'); m.setAttribute('refY', '5'); m.setAttribute('markerWidth', '7'); m.setAttribute('markerHeight', '7'); m.setAttribute('orient', 'auto-start-reverse'); const p = document.createElementNS(ns, 'path'); p.setAttribute('d', 'M0,0 L10,5 L0,10 z'); p.setAttribute('fill', color); m.appendChild(p); defs.appendChild(m); };
+  const col = { v: C('--fx-warn'), h: C('--fx-blue'), r: C('--fx-muted'), bad: C('--fx-bad'), ok: C('--fx-ok') };
+  for (const k in col) mk('ah-' + k, col[k]);
+
+  // lifelines
+  actors.forEach((a) => {
+    el('line', { x1: x[a.id], y1: top - 6, x2: x[a.id], y2: H - 10, stroke: C('--fx-line'), 'stroke-width': 2, 'stroke-dasharray': '4 5' });
+  });
+  // phase bands first (under arrows)
+  items.filter((i) => i.t === 'phase').forEach((p) => {
+    el('rect', { x: 4, y: p.y - 2, width: W - 8, height: phaseH - 8, rx: 8, fill: C('--fx-brand-soft') });
+    el('text', { x: 16, y: p.y + 17, 'font-size': 14.5, 'font-weight': 800, fill: C('--fx-brand') }, p.text);
+  });
+  // headers
+  actors.forEach((a) => {
+    el('rect', { x: x[a.id] - colW / 2 + 6, y: 6, width: colW - 12, height: 70, rx: 12, fill: C('--fx-card'), stroke: C('--fx-line'), 'stroke-width': 1.5 });
+    el('text', { x: x[a.id], y: 30, 'text-anchor': 'middle', 'font-size': 20 }, a.icon);
+    el('text', { x: x[a.id], y: 51, 'text-anchor': 'middle', 'font-size': 14, 'font-weight': 800, fill: C('--fx-ink') }, a.name);
+    el('text', { x: x[a.id], y: 67, 'text-anchor': 'middle', 'font-size': 11.5, fill: C('--fx-muted') }, a.sub);
+  });
+  // messages and notes
+  items.forEach((i) => {
+    if (i.t === 'self') {
+      const t = el('text', { x: 0, y: i.y + 20, 'text-anchor': 'middle', 'font-size': 12.5, 'font-weight': 600, fill: C('--fx-brand'), 'font-family': 'ui-monospace, Menlo, monospace' }, i.text);
+      const w = t.getComputedTextLength() + 28;
+      let bx = x[i.a] - w / 2; bx = Math.max(10, Math.min(W - w - 10, bx));
+      t.setAttribute('x', bx + w / 2);
+      const r = document.createElementNS(ns, 'rect');
+      for (const [k, v] of Object.entries({ x: bx, y: i.y + 2, width: w, height: row - 8, rx: 7, fill: C('--fx-card'), stroke: C('--fx-brand'), 'stroke-width': 1.5 })) r.setAttribute(k, v);
+      svg.insertBefore(r, t);
+      return;
+    }
+    if (i.t !== 'msg') return;
+    const x1 = x[i.from], x2 = x[i.to], dir = x2 > x1 ? 1 : -1;
+    const key = i.tone || i.kind;
+    const color = col[key];
+    const ly = i.y + 22;
+    el('line', { x1: x1 + dir * 4, y1: ly, x2: x2 - dir * 6, y2: ly, stroke: color, 'stroke-width': i.kind === 'v' ? 2.6 : 2, 'stroke-dasharray': i.kind === 'v' ? '2 4' : i.kind === 'r' ? '7 5' : 'none', 'stroke-linecap': 'round', 'marker-end': `url(#ah-${key})` });
+    el('circle', { cx: x1, cy: ly, r: 3.5, fill: color });
+    // label: anchor at the left end of the arrow, may overflow past it
+    const left = Math.min(x1, x2);
+    const t = el('text', { x: left + 10, y: ly - 6, 'font-size': 12.8, fill: i.tone ? color : C('--fx-ink'), 'font-weight': i.tone ? 700 : 500, 'font-style': i.kind === 'v' ? 'italic' : 'normal' }, i.text);
+    const est = t.getComputedTextLength();
+    if (left + 10 + est > W - 8) t.setAttribute('x', Math.max(8, W - 8 - est));
+    // halo for readability over lifelines
+    t.setAttribute('paint-order', 'stroke'); t.setAttribute('stroke', C('--fx-card')); t.setAttribute('stroke-width', '4'); t.setAttribute('stroke-linejoin', 'round');
+  });
+})();
+
+// ---------- Bayesian demo bars ----------
+(function () {
+  const H = [
+    ['Thermal fuse', 0.45, 0.97], ['Heating element', 0.25, 0.04], ['Thermostat', 0.15, 0.05], ['Timer / control', 0.10, 0.03], ['Power / breaker', 0.05, 0.02],
+  ];
+  // P(fuse reads OPEN | hypothesis): only a blown fuse reads open.
+  const box = document.getElementById('bars');
+  const fills = H.map(([name, p]) => {
+    const r = document.createElement('div'); r.className = 'bar';
+    r.innerHTML = `<span>${name}</span><div class="track"><div class="fill"></div></div><span class="mono">${p.toFixed(2)}</span>`;
+    box.appendChild(r); return r;
+  });
+  const set = (ps) => fills.forEach((r, i) => { r.querySelector('.fill').style.width = (ps[i] * 100).toFixed(0) + '%'; r.lastChild.textContent = ps[i].toFixed(2); });
+  const prior = H.map((h) => h[1]);
+  set(prior);
+  document.getElementById('btnTest').onclick = () => {
+    const un = H.map((h) => h[1] * h[2]);
+    const z = un.reduce((a, b) => a + b, 0);
+    const post = un.map((u) => u / z);
+    set(post);
+    document.getElementById('barReason').textContent = `Fuse open → P(fuse) 0.45→${post[0].toFixed(2)} · confident (≥0.85)`;
+  };
+  document.getElementById('btnReset').onclick = () => { set(prior); document.getElementById('barReason').textContent = ''; };
+})();
+</script>
+</body>
+</html>

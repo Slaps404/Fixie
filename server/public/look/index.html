@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#000000">
+<meta name="robots" content="noindex">
+<title>Fixie: show me</title>
+<style>
+  :root { --ok:#22c55e; --warn:#facc15; --bad:#f87171; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; height:100%; background:#000; color:#fff; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; overflow:hidden; }
+  video { position:fixed; inset:0; width:100%; height:100%; object-fit:cover; background:#000; }
+  .screen { position:fixed; inset:0; display:none; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:24px; gap:22px; background:#000; z-index:20; }
+  .screen.on { display:flex; }
+  .big { font-size:34px; font-weight:800; line-height:1.15; }
+  .mid { font-size:22px; line-height:1.3; opacity:.9; }
+  .icon { font-size:84px; line-height:1; }
+  button.huge { font-size:30px; font-weight:800; padding:26px 34px; border-radius:22px; border:0; background:#fff; color:#000; min-width:78%; }
+  button.link { background:none; border:0; color:#fff; opacity:.8; font-size:19px; text-decoration:underline; padding:14px; }
+  #hud { position:fixed; left:0; right:0; top:0; padding:calc(env(safe-area-inset-top) + 14px) 16px 18px; background:linear-gradient(#000c,#0000); z-index:5; text-align:center; display:none; }
+  #hud .icon { font-size:56px; }
+  #hud .big { font-size:30px; text-shadow:0 2px 8px #000; }
+  #guide { position:fixed; left:7%; right:7%; top:30%; height:34%; border-radius:24px; z-index:4; display:none; transition:box-shadow .2s, border-color .2s; border:5px dashed #fff8; }
+  #guide.good { border:6px solid var(--ok); box-shadow:0 0 0 2000px #0004, 0 0 30px var(--ok); }
+  #guide.meh { border:5px solid var(--warn); }
+  #meter { position:fixed; left:12%; right:12%; bottom:calc(env(safe-area-inset-bottom) + 112px); height:14px; border-radius:7px; background:#fff3; z-index:5; overflow:hidden; display:none; }
+  #meter i { display:block; height:100%; width:0; background:var(--warn); transition:width .15s; }
+  #strip { position:fixed; left:12px; bottom:calc(env(safe-area-inset-bottom) + 18px); display:flex; gap:8px; z-index:6; }
+  #strip .t { width:62px; height:62px; border-radius:12px; background:#222 center/cover; position:relative; border:3px solid #fff6; }
+  #strip .t.up { border-color:var(--ok); }
+  #strip .t b { position:absolute; right:-6px; top:-8px; background:var(--ok); color:#000; border-radius:50%; width:26px; height:26px; font-size:18px; display:none; align-items:center; justify-content:center; }
+  #strip .t.up b { display:flex; }
+  #shutter { position:fixed; right:18px; bottom:calc(env(safe-area-inset-bottom) + 14px); width:76px; height:76px; border-radius:50%; border:6px solid #fff; background:#fff3; z-index:6; display:none; }
+  #torch { position:fixed; right:22px; bottom:calc(env(safe-area-inset-bottom) + 104px); font-size:34px; width:64px; height:64px; border-radius:50%; border:0; background:#000a; color:#fff; z-index:6; display:none; }
+  #flash { position:fixed; inset:0; background:#fff; opacity:0; pointer-events:none; z-index:30; transition:opacity .35s; }
+  #gotit { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; flex-direction:column; z-index:31; pointer-events:none; opacity:0; transition:opacity .25s; }
+  #gotit .c { width:170px; height:170px; border-radius:50%; background:var(--ok); color:#000; font-size:120px; font-weight:900; display:flex; align-items:center; justify-content:center; box-shadow:0 0 50px #0008; }
+  #gotit .big { margin-top:16px; text-shadow:0 2px 10px #000; }
+  #done .c { width:190px; height:190px; border-radius:50%; background:var(--ok); color:#000; font-size:130px; font-weight:900; display:flex; align-items:center; justify-content:center; }
+  #found { font-size:36px; font-weight:900; letter-spacing:1px; color:var(--ok); }
+  #keypad input { font-size:64px; width:5.2ch; text-align:center; letter-spacing:.3ch; padding:12px; border-radius:18px; border:4px solid #fff; background:#111; color:#fff; font-weight:800; }
+</style>
+</head>
+<body>
+<video id="v" playsinline muted autoplay></video>
+<div id="guide"></div>
+<div id="hud"><div class="icon" id="hIcon">📷</div><div class="big" id="hText">Starting camera…</div></div>
+<div id="meter"><i></i></div>
+<div id="strip"></div>
+<button id="torch" aria-label="Flashlight">🔦</button>
+<button id="shutter" aria-label="Take picture"></button>
+<div id="flash"></div>
+<div id="gotit"><div class="c">✓</div><div class="big">Got it!</div></div>
+
+<div class="screen" id="start">
+  <div class="icon">📷</div>
+  <div class="big" id="startText">Fixie wants to see it</div>
+  <button class="huge" id="startBtn">Turn on camera</button>
+  <button class="link" id="photoBtn1">Take a photo instead</button>
+</div>
+<div class="screen" id="blocked">
+  <div class="icon">🙂</div>
+  <div class="big">No camera? No problem.</div>
+  <div class="mid">Just keep talking to Fixie.</div>
+  <button class="huge" id="photoBtn2">Take a photo</button>
+</div>
+<div class="screen" id="expired">
+  <div class="icon">⌛</div>
+  <div class="big">This link has expired</div>
+  <div class="mid">Just keep talking to Fixie.</div>
+</div>
+<div class="screen" id="keypad">
+  <div class="big">Type the 4 numbers Fixie said</div>
+  <input id="codeIn" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="one-time-code" autofocus>
+  <div class="mid" id="keypadMsg"></div>
+</div>
+<div class="screen" id="done">
+  <div class="c">✓</div>
+  <div class="big">Fixie can see it</div>
+  <div id="found"></div>
+  <div class="mid">You can put the phone down<br>and keep talking.</div>
+</div>
+<input type="file" id="file" accept="image/*" capture="environment" hidden>
+
+<script>
+/*__LOOK_CONFIG__*/
+(function () {
+  'use strict';
+  var C = window.__LOOK__ || {};
+  var $ = function (id) { return document.getElementById(id); };
+  var video = $('v');
+  var shown = function (id) { ['start','blocked','expired','keypad','done'].forEach(function (s) { $(s).classList.toggle('on', s === id); }); };
+
+  // ---------- no code: keypad (spoken-code fallback) ----------
+  if (!C.code) {
+    shown('keypad');
+    $('codeIn').addEventListener('input', function (e) {
+      var v = e.target.value.replace(/\D/g, '').slice(0, 4);
+      e.target.value = v;
+      if (v.length === 4) location.href = '/look/' + v;
+    });
+    return;
+  }
+  if (!C.valid) { shown('expired'); return; }
+
+  // ---------- tunables (tier 1) ----------
+  var AW = 320;                 // analysis width
+  var THRESH0 = 0.52, THRESH_MIN = 0.33;
+  var COOLDOWN = 1800, MAX_SHOTS = C.maxShots || 5, STABLE_FRAMES = 3;
+  var TICK = 140;
+
+  var stream = null, track = null, imageCapture = null, takePhotoOk = true;
+  var ac = document.createElement('canvas'), actx = ac.getContext('2d', { willReadFrequently: true });
+  var prevSmall = null, stableRun = 0, lastShot = 0, shots = 0, startedAt = 0, busy = false;
+  var hashes = [], uploads = Promise.resolve(), doneShown = false, pollTimer = null, running = false;
+  var best = null; // best frame seen since last shot: {score, m}
+
+  // ---------- feedback ----------
+  var audio = null;
+  function beep() {
+    try {
+      audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+      if (audio.state === 'suspended') audio.resume();
+      var o = audio.createOscillator(), g = audio.createGain();
+      o.frequency.value = 880; g.gain.value = 0.08; o.connect(g); g.connect(audio.destination);
+      o.start(); o.frequency.setValueAtTime(1320, audio.currentTime + 0.08); o.stop(audio.currentTime + 0.18);
+    } catch (e) {}
+  }
+  document.addEventListener('touchstart', function () { try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); audio.resume(); } catch (e) {} }, { once: true });
+  function gotIt() {
+    var f = $('flash'); f.style.transition = 'none'; f.style.opacity = '0.85';
+    requestAnimationFrame(function () { f.style.transition = 'opacity .35s'; f.style.opacity = '0'; });
+    var g = $('gotit'); g.style.opacity = '1'; setTimeout(function () { g.style.opacity = '0'; }, 900);
+    if (navigator.vibrate) navigator.vibrate([40, 40, 80]);
+    beep();
+  }
+  function hud(icon, text, cls) {
+    $('hIcon').textContent = icon; $('hText').textContent = text;
+    $('guide').className = cls || '';
+  }
+
+  // ---------- camera ----------
+  function startCamera() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { shown('blocked'); return; }
+    hud('📷', 'Starting camera…');
+    navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 2560 }, height: { ideal: 1440 } }
+    }).then(function (s) {
+      stream = s; track = s.getVideoTracks()[0];
+      video.srcObject = s;
+      var p = video.play(); if (p && p.catch) p.catch(function () { shown('start'); });
+      try { if (window.ImageCapture) imageCapture = new ImageCapture(track); } catch (e) { imageCapture = null; }
+      try {
+        var caps = track.getCapabilities ? track.getCapabilities() : {};
+        if (caps.focusMode && caps.focusMode.indexOf('continuous') >= 0) track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(function () {});
+        if (caps.torch) $('torch').style.display = 'block';
+      } catch (e) {}
+      try { if (navigator.wakeLock) navigator.wakeLock.request('screen').catch(function () {}); } catch (e) {}
+      shown(null);
+      ['hud','guide','meter','shutter'].forEach(function (id) { $(id).style.display = 'block'; });
+      hud(C.icon || '🔍', C.prompt || 'Point at the sticker');
+      startedAt = Date.now(); running = true;
+      ping('opened', { camera: true, w: (track.getSettings && track.getSettings().width) || null, h: (track.getSettings && track.getSettings().height) || null, takePhoto: !!imageCapture });
+      loop();
+      poll(4000);
+    }).catch(function (err) {
+      ping('opened', { camera: false, error: String(err && err.name || err) });
+      if (err && (err.name === 'NotAllowedError' || err.name === 'SecurityError')) {
+        // iOS sometimes needs a tap first; a second refusal means blocked.
+        if ($('start').classList.contains('on')) shown('blocked'); else shown('start');
+      } else shown('blocked');
+    });
+  }
+  function stopCamera() {
+    running = false;
+    if (stream) stream.getTracks().forEach(function (t) { t.stop(); });
+    stream = null; track = null; imageCapture = null;
+  }
+  $('startBtn').onclick = startCamera;
+  $('torch').onclick = function () {
+    if (!track) return; var on = this.dataset.on !== '1'; this.dataset.on = on ? '1' : '0';
+    track.applyConstraints({ advanced: [{ torch: on }] }).catch(function () {});
+  };
+  $('shutter').onclick = function () { capture(best ? best.m : null, true); };
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) { if (stream) { stopCamera(); hud('📷', 'Paused'); } }
+    else if (!stream && !doneShown && C.valid && startedAt) startCamera();
+  });
+
+  // ---------- tier 1: per-frame quality + text likelihood ----------
+  function analyze() {
+    var vw = video.videoWidth, vh = video.videoHeight;
+    if (!vw || !vh) return null;
+    var w = AW, h = Math.round(AW * vh / vw);
+    if (ac.width !== w) { ac.width = w; ac.height = h; }
+    actx.drawImage(video, 0, 0, w, h);
+    var d = actx.getImageData(0, 0, w, h).data;
+    var n = w * h, g = new Uint8Array(n), i, x, y, sum = 0, bright = 0;
+    for (i = 0; i < n; i++) { var l = (d[i*4] * 77 + d[i*4+1] * 150 + d[i*4+2] * 29) >> 8; g[i] = l; sum += l; if (l >= 250) bright++; }
+    var mean = sum / n;
+    // Laplacian variance (focus/blur)
+    var ls = 0, ls2 = 0, ln = 0;
+    // Edge grid for text likelihood: 8x8 cells, density of strong gradients in both directions.
+    var CS = 8, cw = Math.floor(w / CS), ch = Math.floor(h / CS);
+    var cGx = new Float32Array(cw * ch), cGy = new Float32Array(cw * ch), cE = new Uint16Array(cw * ch);
+    var T = 38;
+    for (y = 1; y < h - 1; y++) {
+      for (x = 1; x < w - 1; x++) {
+        i = y * w + x;
+        var lap = 4 * g[i] - g[i-1] - g[i+1] - g[i-w] - g[i+w];
+        ls += lap; ls2 += lap * lap; ln++;
+        var gx = Math.abs(g[i+1] - g[i-1]), gy = Math.abs(g[i+w] - g[i-w]);
+        var cx = (x / CS) | 0, cy = (y / CS) | 0;
+        if (cx < cw && cy < ch) { var c = cy * cw + cx; cGx[c] += gx; cGy[c] += gy; if (gx > T || gy > T) cE[c]++; }
+      }
+    }
+    var lapVar = ls2 / ln - (ls / ln) * (ls / ln);
+    var sharp = clamp((Math.log(lapVar + 1) / Math.LN10 - 1.6) / 1.4);
+    // Text-ish cells: moderate edge density with strokes in both directions (rules out stripes and flat areas).
+    var tx = new Uint8Array(cw * ch);
+    for (i = 0; i < cw * ch; i++) {
+      var dens = cE[i] / (CS * CS), tot = cGx[i] + cGy[i], ratio = tot ? cGx[i] / tot : 0;
+      tx[i] = dens > 0.1 && dens < 0.65 && ratio > 0.28 && ratio < 0.82 ? 1 : 0;
+    }
+    // Text lines = horizontal runs of >= 3 text-ish cells.
+    var runCells = 0, minX = cw, minY = ch, maxX = -1, maxY = -1;
+    for (y = 0; y < ch; y++) {
+      var run = 0;
+      for (x = 0; x <= cw; x++) {
+        if (x < cw && tx[y * cw + x]) { run++; continue; }
+        if (run >= 3) {
+          runCells += run;
+          minX = Math.min(minX, x - run); maxX = Math.max(maxX, x - 1); minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+        }
+        run = 0;
+      }
+    }
+    var textFrac = runCells / (cw * ch);
+    var text = clamp(textFrac / 0.12);
+    var glare = clamp((bright / n) / 0.04);
+    // Motion: mean abs diff on a 40x? subsample vs previous frame.
+    var sw = 40, sh = Math.round(40 * h / w), small = new Uint8Array(sw * sh), mad = 0;
+    for (y = 0; y < sh; y++) for (x = 0; x < sw; x++) small[y * sw + x] = g[Math.floor(y * h / sh) * w + Math.floor(x * w / sw)];
+    if (prevSmall && prevSmall.length === small.length) { for (i = 0; i < small.length; i++) mad += Math.abs(small[i] - prevSmall[i]); mad /= small.length; } else mad = 99;
+    prevSmall = small;
+    var stable = mad < 7;
+    stableRun = stable ? stableRun + 1 : 0;
+    var dark = mean < 45;
+    var score = Math.pow(text, 0.55) * Math.pow(sharp, 0.45) * (1 - 0.8 * glare) * (stableRun >= STABLE_FRAMES ? 1 : 0.6) * (dark ? 0.5 : 1);
+    var bbox = maxX >= 0 ? { x: minX * CS / w, y: minY * CS / h, w: (maxX - minX + 1) * CS / w, h: (maxY - minY + 1) * CS / h } : null;
+    return { score: score, sharp: sharp, text: text, glare: glare, dark: dark, stable: stableRun >= STABLE_FRAMES, textFrac: textFrac, bbox: bbox, hash: ahash(g, w, h) };
+  }
+  function ahash(g, w, h) {
+    var bits = [], vals = [], s = 0, x, y;
+    for (y = 0; y < 8; y++) for (x = 0; x < 8; x++) { var v = g[Math.floor((y + 0.5) * h / 8) * w + Math.floor((x + 0.5) * w / 8)]; vals.push(v); s += v; }
+    var m = s / 64; for (x = 0; x < 64; x++) bits.push(vals[x] > m ? 1 : 0); return bits;
+  }
+  function ham(a, b) { var d = 0; for (var i = 0; i < 64; i++) if (a[i] !== b[i]) d++; return d; }
+  function clamp(v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
+
+  function guide(m) {
+    var bar = $('meter').firstElementChild;
+    bar.style.width = Math.round(m.score * 100) + '%';
+    bar.style.background = m.score >= thresh() ? 'var(--ok)' : 'var(--warn)';
+    if (m.dark) return hud('💡', track && $('torch').style.display === 'block' ? 'Too dark: tap 🔦' : 'More light, please', 'meh');
+    if (m.glare > 0.5) return hud('↩️', 'Too shiny: tilt a little', 'meh');
+    if (m.text < 0.15) return hud(C.icon || '🔍', C.prompt || 'Point at the sticker', '');
+    if (m.textFrac < 0.04) return hud('➕', 'Move closer', 'meh');
+    if (!m.stable || m.sharp < 0.45) return hud('✋', 'Hold still…', 'meh');
+    hud('✅', 'Perfect, hold it', 'good');
+  }
+  function thresh() {
+    // If nothing qualifies for a while, relax: tiers 2 and 3 can still judge a so-so frame.
+    var t = (Date.now() - Math.max(startedAt, lastShot)) / 1000;
+    return Math.max(THRESH_MIN, THRESH0 - Math.max(0, t - 8) * 0.02);
+  }
+
+  function loop() {
+    if (!running) return;
+    var m = null;
+    try { m = analyze(); } catch (e) {}
+    if (m) {
+      if (!doneShown) guide(m);
+      if (!best || m.score > best.score) best = { score: m.score, m: m };
+      var now = Date.now();
+      if (!busy && shots < MAX_SHOTS && now - lastShot > COOLDOWN && m.stable && m.score >= thresh()) {
+        var dup = hashes.some(function (h) { return ham(h.hash, m.hash) < 8 && m.score < h.score * 1.15; });
+        if (!dup) capture(m, false);
+      }
+    }
+    setTimeout(loop, TICK);
+  }
+
+  // ---------- hi-res still ----------
+  function grabSource() {
+    if (imageCapture && takePhotoOk) {
+      var t = new Promise(function (_, rej) { setTimeout(function () { rej(new Error('timeout')); }, 2500); });
+      return Promise.race([imageCapture.takePhoto(), t])
+        .then(function (blob) { return createImageBitmap(blob); })
+        .catch(function () { takePhotoOk = false; return videoCanvas(); });
+    }
+    return Promise.resolve(videoCanvas());
+  }
+  function videoCanvas() {
+    var c = document.createElement('canvas'); c.width = video.videoWidth; c.height = video.videoHeight;
+    c.getContext('2d').drawImage(video, 0, 0); return c;
+  }
+  function encode(src, sx, sy, sw, sh, maxEdge, q) {
+    var k = Math.min(1, maxEdge / Math.max(sw, sh));
+    var c = document.createElement('canvas'); c.width = Math.round(sw * k); c.height = Math.round(sh * k);
+    var x = c.getContext('2d'); x.imageSmoothingQuality = 'high'; x.drawImage(src.img || src, sx, sy, sw, sh, 0, 0, c.width, c.height);
+    return c.toDataURL('image/jpeg', q);
+  }
+  function capture(m, manual) {
+    if (busy || !video.videoWidth) return;
+    busy = true; lastShot = Date.now();
+    var meta = m || { score: 0, sharp: 0, text: 0, glare: 0, bbox: null, hash: null };
+    grabSource().then(function (src) {
+      var W = src.width, H = src.height;
+      var frame = { image: encode(src, 0, 0, W, H, 1600, 0.85), thumb: encode(src, 0, 0, W, H, 384, 0.7) };
+      var b = meta.bbox;
+      if (b && b.w * b.h < 0.5) {
+        var pad = 0.2, bx = Math.max(0, b.x - b.w * pad), by = Math.max(0, b.y - b.h * pad - 0.03);
+        var bw = Math.min(1 - bx, b.w * (1 + 2 * pad)), bh = Math.min(1 - by, b.h * (1 + 2 * pad) + 0.06);
+        frame.crop = encode(src, bx * W, by * H, bw * W, bh * H, 1600, 0.9);
+      }
+      if (src.close) src.close();
+      frame.tier1 = { score: r3(meta.score), sharpness: r3(meta.sharp), text: r3(meta.text), glare: r3(meta.glare), stable: !!meta.stable, manual: !!manual };
+      shots++; if (meta.hash) hashes.push({ hash: meta.hash, score: meta.score });
+      best = null;
+      gotIt();
+      var tile = document.createElement('div'); tile.className = 't'; tile.style.backgroundImage = 'url(' + frame.thumb + ')'; tile.innerHTML = '<b>✓</b>';
+      var strip = $('strip'); strip.appendChild(tile); while (strip.children.length > 4) strip.removeChild(strip.firstChild);
+      uploads = uploads.then(function () { return upload(frame, 2); }).then(function (ok) { if (ok) tile.classList.add('up'); poll(1500); });
+      if (shots >= MAX_SHOTS) hud('⏳', 'Fixie is looking…', 'good');
+    }).catch(function () {}).then(function () { busy = false; });
+  }
+  function r3(v) { return Math.round((v || 0) * 1000) / 1000; }
+  function upload(frame, tries) {
+    return fetch('/vision/' + C.code + '/frames', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ frames: [frame] }) })
+      .then(function (r) { return r.ok; })
+      .catch(function () { return false; })
+      .then(function (ok) { return ok || tries <= 1 ? ok : new Promise(function (res) { setTimeout(function () { res(upload(frame, tries - 1)); }, 800); }); });
+  }
+
+  // ---------- results back from the server ----------
+  function poll(ms) {
+    clearTimeout(pollTimer);
+    pollTimer = setTimeout(function () {
+      fetch('/vision/' + C.code + '/result').then(function (r) { return r.ok ? r.json() : null; }).then(function (res) {
+        if (!res) return poll(4000);
+        if (res.expired) { stopCamera(); return shown('expired'); }
+        if (res.done && !doneShown) {
+          doneShown = true;
+          $('found').textContent = res.headline || '';
+          shown('done'); gotIt();
+          setTimeout(stopCamera, 2500); // release the camera: privacy + battery
+          return;
+        }
+        if (res.hint && shots >= MAX_SHOTS) { shots = MAX_SHOTS - 2; hud('✋', res.hint, 'meh'); } // allow a retry burst
+        poll(res.working ? 1200 : 2500);
+      }).catch(function () { poll(4000); });
+    }, ms);
+  }
+  function ping(what, data) {
+    try { fetch('/vision/' + C.code + '/' + what, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data || {}), keepalive: true }); } catch (e) {}
+  }
+
+  // ---------- native camera fallback (works everywhere, full sensor resolution) ----------
+  function pickPhoto() { $('file').click(); }
+  function loadImage(blob) {
+    // <img> decodes HEIC on iOS where createImageBitmap may not.
+    return new Promise(function (res, rej) {
+      var u = URL.createObjectURL(blob), img = new Image();
+      img.onload = function () { res({ width: img.naturalWidth, height: img.naturalHeight, img: img, close: function () { URL.revokeObjectURL(u); } }); };
+      img.onerror = function () { URL.revokeObjectURL(u); rej(new Error('decode')); };
+      img.src = u;
+    });
+  }
+  $('photoBtn1').onclick = pickPhoto; $('photoBtn2').onclick = pickPhoto;
+  $('file').onchange = function () {
+    var f = this.files && this.files[0]; if (!f) return;
+    loadImage(f).then(function (bmp) {
+      var frame = { image: encode(bmp, 0, 0, bmp.width, bmp.height, 1600, 0.85), thumb: encode(bmp, 0, 0, bmp.width, bmp.height, 384, 0.7), tier1: { score: 0.6, manual: true } };
+      gotIt();
+      if (bmp.close) bmp.close();
+      return upload(frame, 2);
+    }).then(function () { poll(1500); }).catch(function () {});
+  };
+
+  // Go: camera starts immediately, no buttons. iOS/Android show their own permission prompt once.
+  startCamera();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+node_modules
+.next
+.env
+.env.local
+.clerk
+next-env.d.ts
+*.tsbuildinfo
+.clerk-claim-url

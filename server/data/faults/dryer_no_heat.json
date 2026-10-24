@@ -1,0 +1,93 @@
+{
+  "id": "dryer_no_heat",
+  "appliance": "electric dryer",
+  "symptom": "no heat",
+  "note": "Likelihoods are expert-written, not learned. Every confirmed fix tunes them later.",
+  "hypotheses": [
+    { "id": "thermal_fuse", "name": "Thermal fuse", "short": "fuse", "prior": 0.45, "partNumber": "WP3392519" },
+    { "id": "heating_element", "name": "Heating element", "short": "element", "prior": 0.25 },
+    { "id": "thermostat", "name": "High-limit / cycling thermostat", "short": "thermostat", "prior": 0.15 },
+    { "id": "timer_control", "name": "Timer / control", "short": "timer", "prior": 0.10 },
+    { "id": "power_one_leg", "name": "Power (breaker, one 240V leg)", "short": "power", "prior": 0.05 }
+  ],
+  "tests": [
+    {
+      "id": "breaker_check",
+      "label": "Breaker",
+      "prompt": "First, go to your breaker box. Dryers use two breakers side by side. Are both of them switched on, or is one tripped?",
+      "outcomes": ["ok", "tripped"],
+      "likelihood": {
+        "ok": { "thermal_fuse": 0.98, "heating_element": 0.98, "thermostat": 0.98, "timer_control": 0.98, "power_one_leg": 0.15 },
+        "tripped": { "thermal_fuse": 0.02, "heating_element": 0.02, "thermostat": 0.02, "timer_control": 0.02, "power_one_leg": 0.85 }
+      },
+      "safetyCost": 0,
+      "requiresAck": [],
+      "needsMeter": false
+    },
+    {
+      "id": "drum_spins",
+      "label": "Drum",
+      "prompt": "Start the dryer. Does the drum turn and tumble normally?",
+      "outcomes": ["yes", "no"],
+      "likelihood": {
+        "yes": { "thermal_fuse": 0.85, "heating_element": 0.97, "thermostat": 0.97, "timer_control": 0.70, "power_one_leg": 0.95 },
+        "no": { "thermal_fuse": 0.15, "heating_element": 0.03, "thermostat": 0.03, "timer_control": 0.30, "power_one_leg": 0.05 }
+      },
+      "safetyCost": 0,
+      "requiresAck": [],
+      "needsMeter": false
+    },
+    {
+      "id": "any_warmth",
+      "label": "Warmth",
+      "prompt": "Run it for about five minutes, then put your hand near the vent or inside the door. Is there any warmth at all, or is it completely cold?",
+      "outcomes": ["some", "none"],
+      "likelihood": {
+        "some": { "thermal_fuse": 0.03, "heating_element": 0.10, "thermostat": 0.50, "timer_control": 0.12, "power_one_leg": 0.10 },
+        "none": { "thermal_fuse": 0.97, "heating_element": 0.90, "thermostat": 0.50, "timer_control": 0.88, "power_one_leg": 0.90 }
+      },
+      "safetyCost": 0,
+      "requiresAck": [],
+      "needsMeter": false
+    },
+    {
+      "id": "fuse_continuity",
+      "label": "Fuse",
+      "prompt": "Make sure the dryer is unplugged. Touch your meter probes to the two metal tabs on the little white fuse, set to beep. Does it beep, or stay silent?",
+      "outcomes": ["open", "closed"],
+      "likelihood": {
+        "open": { "thermal_fuse": 0.95, "heating_element": 0.02, "thermostat": 0.02, "timer_control": 0.02, "power_one_leg": 0.02 },
+        "closed": { "thermal_fuse": 0.05, "heating_element": 0.98, "thermostat": 0.98, "timer_control": 0.98, "power_one_leg": 0.98 }
+      },
+      "safetyCost": 1,
+      "requiresAck": ["unplugged"],
+      "needsMeter": true
+    },
+    {
+      "id": "element_continuity",
+      "label": "Element",
+      "prompt": "With the dryer still unplugged, touch the probes to the two terminals on the heating coil. Set to ohms, a good coil reads around ten. Is it about ten, or does it read open?",
+      "outcomes": ["open", "ok"],
+      "likelihood": {
+        "open": { "thermal_fuse": 0.03, "heating_element": 0.92, "thermostat": 0.02, "timer_control": 0.02, "power_one_leg": 0.02 },
+        "ok": { "thermal_fuse": 0.97, "heating_element": 0.08, "thermostat": 0.98, "timer_control": 0.98, "power_one_leg": 0.98 }
+      },
+      "safetyCost": 1,
+      "requiresAck": ["unplugged"],
+      "needsMeter": true
+    },
+    {
+      "id": "thermostat_continuity",
+      "label": "Thermostat",
+      "prompt": "Still unplugged: touch the probes to the two terminals on the thermostat, the small round disc by the heater. Does it beep, or stay silent?",
+      "outcomes": ["open", "closed"],
+      "likelihood": {
+        "open": { "thermal_fuse": 0.03, "heating_element": 0.03, "thermostat": 0.85, "timer_control": 0.02, "power_one_leg": 0.02 },
+        "closed": { "thermal_fuse": 0.97, "heating_element": 0.97, "thermostat": 0.15, "timer_control": 0.98, "power_one_leg": 0.98 }
+      },
+      "safetyCost": 1,
+      "requiresAck": ["unplugged"],
+      "needsMeter": true
+    }
+  ]
+}
