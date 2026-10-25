@@ -2,8 +2,8 @@ import 'server-only';
 
 export const API_URL = (process.env.FIXIE_API_URL || 'http://localhost:3000').replace(/\/$/, '');
 
-// The server's default admin token (server/src/config.ts) unless FIXIE_ADMIN_TOKEN overrides it.
-const ADMIN_TOKEN = process.env.FIXIE_ADMIN_TOKEN || 'fixie-demo';
+// The server's default admin token (server/src/config.ts) unless ADMIN_TOKEN overrides it.
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || 'fixie-demo';
 
 export function backend(path: string, init: RequestInit & { admin?: boolean } = {}) {
   const { admin, headers, ...rest } = init;

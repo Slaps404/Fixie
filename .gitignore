@@ -1,7 +1,10 @@
 node_modules/
+# Secrets: the root .env holds every key (see .env.example). Ignored at any depth.
 .env
 .env.*
 !.env.example
+*.pem
+*.key
 server/data/events.jsonl
 server/data/jobs.json
 server/data/quotes.jsonl

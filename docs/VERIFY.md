@@ -35,7 +35,7 @@ If a scenario fails the report lists each failed check. `VERIFY_KEEP=1` keeps th
 
 ## 2. `npm run verify:live`
 
-Setup: `server/.env` has `VAPI_API_KEY`, `VAPI_PHONE_NUMBER_ID`, `VAPI_INTAKE_ASSISTANT_ID`, `PUBLIC_URL`, `VAPI_WEBHOOK_SECRET`. The server runs live in another terminal (`npm start`, no `DRY_RUN`) and `ADMIN_TOKEN` matches. Without `VAPI_API_KEY` it prints what is missing and exits 2.
+Setup: the root `.env` has `VAPI_API_KEY`, `VAPI_PHONE_NUMBER_ID`, `VAPI_INTAKE_ASSISTANT_ID`, `PUBLIC_URL`, `VAPI_WEBHOOK_SECRET`. The server runs live in another terminal (`npm start`, no `DRY_RUN`) and `ADMIN_TOKEN` matches. Without `VAPI_API_KEY` it prints what is missing and exits 2.
 
 ```
 npm run verify:live                           # preflight only

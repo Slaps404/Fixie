@@ -1,6 +1,6 @@
 // End-to-end sim rehearsal against a running server (start it with `SIM_SPEED=4 npm start`).
 // Drives intake → sourcing → callback → ORDERED → delivered → FIXED over HTTP only, then asserts the key events.
-import 'dotenv/config';
+import '../src/env.ts';
 
 const BASE = (process.env.BASE ?? `http://localhost:${process.env.PORT ?? 3000}`).replace(/\/$/, '');
 const ADMIN = process.env.ADMIN_TOKEN ?? 'fixie-demo';

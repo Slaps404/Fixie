@@ -24,7 +24,8 @@ Preconditions: a healthy run, then `$S reset`.
 
 ## Gotchas
 
-- **FAIL as of 2026-10-24.** The sim supplier personas always quote the dryer part (`partNumberSaid:"WP3392519"`). Every fault quote is therefore rejected with `could not confirm the identical part (WP3392519), not NOX-5WK97401`.
-  - The job goes SOURCING → NOTIFIED with "No usable quote".
-  - The tech call is then refused with a guard of kind **`max_calls`** ("Job is NOTIFIED. Not calling Marco"). That label is misleading, since no cap was hit.
-  - The beat needs part-aware sim quotes (say the job's part number) and probably a tech call even when sourcing fails.
+- **PASS as of 2026-10-25.** Sim supplier personas now quote the job's own part number (`partFor(req)` in `sim.ts`), so the fault quotes pass the identical-part check.
+  - Observed on a fresh run: `part_identified` NOX-5WK97401, `best_deal` PartsDirect Counter ($261, identical part), a `call_started` for the tech lane (Marco, `···0105`), then the job ends NOTIFIED.
+  - The tech call is placed after sourcing concludes, and the job moves SOURCING → NOTIFIED only once that call is placed.
+  - If a regression brings back "could not confirm the identical part", check `partFor` in `server/src/vapi/sim.ts` first.
+- **Run state is shared.** `$STATE_ROOT/current` is one global pointer. Export your own `RUN_ID` before every command, and never run `cleanup` without it, so you do not clean up another session's run.

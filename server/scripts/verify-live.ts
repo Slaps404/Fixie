@@ -5,7 +5,7 @@
 //   npm run verify:live -- --phone partsdirect   ring ONE roster phone through POST /demo/test-call and watch it end to end
 //   npm run verify:live -- --intake              prints the Twilio number, waits for a real inbound call to reach start_job
 //   flags: --skip-preflight  --timeout <sec>  --stop (intake: stop the job right after diagnosis)  BASE=http://host:port
-import 'dotenv/config';
+import '../src/env.ts';
 import { spawn } from 'node:child_process';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -85,7 +85,7 @@ function configGate(): void {
   if (!config.vapi.apiKey) {
     console.error('verify:live needs real Vapi credentials. Missing:');
     for (const [k, , why] of missing) console.error(`  - ${k}  (${why})`);
-    console.error('\nSet them in server/.env (see .env.example), start the server with DRY_RUN unset, then re-run.');
+    console.error('\nSet them in the repo-root .env (see .env.example), start the server with DRY_RUN unset, then re-run.');
     console.error('To rehearse without phones use: npm run verify');
     process.exit(2);
   }

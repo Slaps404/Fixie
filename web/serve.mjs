@@ -3,7 +3,7 @@
 //   node web/serve.mjs            → http://127.0.0.1:8080/
 // - Static files from web/.
 // - GET  /replay/events.jsonl → server/data/events.jsonl (read-only), for ?replay=1.
-// - POST /admin/<path>        → <server>/<path> with the x-admin header added here from server/.env (ADMIN_TOKEN).
+// - POST /admin/<path>        → <server>/<path> with the x-admin header added here from the repo-root .env (ADMIN_TOKEN).
 //   The token is never sent to the browser or printed.
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 
 const WEB = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(WEB, '..');
-const ENV_FILE = process.env.ENV_FILE || join(ROOT, 'server', '.env');
+const ENV_FILE = process.env.ENV_FILE || join(ROOT, '.env');
 const EVENTS_FILE = join(ROOT, 'server', 'data', 'events.jsonl');
 const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || '127.0.0.1';
@@ -22,7 +22,7 @@ const ADMIN_PATHS = /^\/(demo\/sim-intake|demo\/reset|demo\/mode|simulate\/deliv
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.mjs': 'text/javascript', '.json': 'application/json',
                 '.jsonl': 'application/x-ndjson', '.svg': 'image/svg+xml', '.png': 'image/png', '.css': 'text/css', '.md': 'text/plain; charset=utf-8' };
 
-// Re-read on every request so editing server/.env needs no restart. Same default as server/src/config.ts.
+// Re-read on every request so editing the repo-root .env needs no restart. Same default as server/src/config.ts.
 function adminToken() {
   if (process.env.ADMIN_TOKEN) return process.env.ADMIN_TOKEN;
   try {

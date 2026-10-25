@@ -1,8 +1,8 @@
 # Getting the API keys (≈15 min)
 
-Put every value in **`server/.env`** on the T3 box. It already exists, it's gitignored, and the webhook secret is pre-filled. Edit it in T3's file editor or terminal. **Never paste keys into a chat or commit them.**
+Put every value in **the root `.env`** on the T3 box. It already exists, it's gitignored, and the webhook secret is pre-filled. Edit it in T3's file editor or terminal. **Never paste keys into a chat or commit them.**
 
-| # | Service | Steps | Goes into `server/.env` |
+| # | Service | Steps | Goes into the root `.env` |
 |---|---|---|---|
 | 1 | **Vapi** (voice agent) | Sign up at [dashboard.vapi.ai](https://dashboard.vapi.ai). Billing → add **$20** credit. Org settings → **API Keys** → copy the **Private** key | `VAPI_API_KEY=` |
 | 2 | **Twilio** (phone number) | Sign up at [twilio.com/try-twilio](https://www.twilio.com/try-twilio). **Upgrade** the account (add $20), which removes the trial limits. Phone Numbers → **Buy a number**: US, local, **Voice** capable (619/858 is nice). Console home → copy the **Account SID** and **Auth Token** | (used in step 3 only) |

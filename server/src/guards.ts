@@ -102,7 +102,9 @@ export const guards: Guards = {
       }
     }
 
-    if (job.reservedMinutes + minutes > config.caps.maxMinutes + 1e-9) {
+    // The minutes cap bounds the agent's outbound sourcing (warranty/supplier). Customer calls (callback, install walkthrough)
+    // are already capped at 2 attempts each, and an install can legitimately run long.
+    if (!exempt && job.reservedMinutes + minutes > config.caps.maxMinutes + 1e-9) {
       return {
         ok: false,
         kind: 'minutes',

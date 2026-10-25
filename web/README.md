@@ -20,7 +20,7 @@ You can also drag any `events.jsonl` onto the board to replay its last run.
 | `X` | Kill switch: `POST /jobs/:id/stop` (asks to confirm) |
 | `R` · `Space` · `L` · `M` · `T` · `F` | clear board / restart replay · pause playback · live · mock · light/dark · fullscreen |
 
-**Admin token:** the hotkeys `POST /admin/<path>` to `serve.mjs`, which adds `x-admin` from `server/.env` (`ADMIN_TOKEN`, re-read on every request) and forwards to the server. The token never reaches the browser or the terminal. The proxy only forwards to localhost and only allows the routes above.
+**Admin token:** the hotkeys `POST /admin/<path>` to `serve.mjs`, which adds `x-admin` from the root `.env` (`ADMIN_TOKEN`, re-read on every request) and forwards to the server. The token never reaches the browser or the terminal. The proxy only forwards to localhost and only allows the routes above.
 
 **Options:** `serve.mjs` takes env `PORT` (8080), `HOST` (127.0.0.1), and `FIXIE_SERVER` (http://localhost:3000). The board takes query params `server=`, `speed=`, `manual` (playback waits for `D`), `loop`, `run=`, `theme=light`, plus fallback caps `maxCalls`, `maxMinutes`, `spendCap`, `budget=40`, `techBudget=1500`. Live `metrics` events override the calls, minutes, and spend caps.
 

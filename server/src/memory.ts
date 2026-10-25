@@ -31,6 +31,8 @@ export interface CustomerProfile {
   phone: string;
   name?: string;
   hasMeter?: boolean;
+  /** Agreed to the recording notice and to callbacks on an earlier call; never ask again. */
+  consented?: boolean;
   comfortWithTools?: 'none' | 'some' | 'handy';
   /** Sparse, explicit answers only. Everything else is inferred from the ladder by knowsConcept. */
   knows?: Partial<Record<Concept, boolean>>;
@@ -197,18 +199,27 @@ function isReturning(p: CustomerProfile | undefined): p is CustomerProfile {
   return !!p && (!!p.name || p.hasMeter !== undefined || !!p.comfortWithTools || !!p.knows || p.appliances.length > 0 || p.jobs.length > 0 || p.notes.length > 0);
 }
 
+/** Model-supplied placeholders ("unknown", "caller", "n/a") are not names; never store or speak them. */
+export function isRealName(name: string | undefined | null): name is string {
+  const n = (name ?? '').trim();
+  return n.length > 1 && !/^(unknown|caller|customer|user|n\/?a|none|null|undefined|not provided|anonymous|sir|ma'?am)$/i.test(n);
+}
+
 /** The lookup_caller tool result. */
 export function summarize(p: CustomerProfile | undefined): string {
-  if (!isReturning(p)) return 'New caller.';
+  const consented = p?.consented === true;
+  if (!isReturning(p)) return consented ? 'Known caller (no history yet). Consent: already given, do not ask again.' : 'New caller. Consent: not yet given.';
   const last = p.appliances[p.appliances.length - 1];
   const parts: string[] = [];
-  if (p.name) {
+  const name = isRealName(p.name) ? p.name : undefined;
+  if (name) {
     const again = last
       ? ` Then ask if this is about their ${last.appliance ? `${last.appliance} ` : ''}${last.model} again; if yes, you already have the model${last.purchaseYear ? ' and purchase year' : ''}, so don't ask.`
       : '';
-    parts.push(`Greet: "Welcome back, ${p.name}! It's Fixie again."${again}`);
+    parts.push(`Greet: "Welcome back, ${name}! It's Fixie again."${again}`);
   }
-  parts.push(p.name ? `Returning caller: ${p.name}.` : 'Returning caller.');
+  parts.push(name ? `Returning caller: ${name}.` : 'Returning caller (name unknown: greet warmly without a name, never say "unknown").');
+  parts.push(p.consented ? 'Consent: already given on an earlier call. Do NOT ask again and do NOT re-introduce yourself as an AI.' : 'Consent: not yet given.');
   const known = profileFacts(p);
   if (known.length) parts.push(`Known: ${known.join('; ')}.`);
   const k = knowledge(p);

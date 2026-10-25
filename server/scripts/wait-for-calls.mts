@@ -1,7 +1,7 @@
 // Blocks until Vapi reports no active calls (queued/ringing/in-progress), or until the timeout.
 // Used as ExecStop for the fixie systemd service, so `systemctl restart fixie` never cuts a live call.
 // Asks Vapi directly, so it works even when our server or tunnel is down.
-import 'dotenv/config';
+import '../src/env.ts';
 
 const KEY = process.env.VAPI_API_KEY ?? '';
 const TIMEOUT_S = Number(process.env.WAIT_FOR_CALLS_TIMEOUT ?? 600);

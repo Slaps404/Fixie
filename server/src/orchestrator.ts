@@ -12,7 +12,7 @@ import { partByNumber, parts } from './parts.ts';
 import { dialer, endCallCtx, partyName, safeRoster, simFlag } from './dialer.ts';
 import { initialState, isConfident, loadFaultTree, nextTest, observe, reasonFor, topHypothesis, UNKNOWN } from './diagnosis.ts';
 import type { DiagnosisState, FaultTest, FaultTree } from './diagnosis.ts';
-import { getProfile, isConcept, knownFacts, knowsConcept, normalizePhone, rememberAppliance, rememberJob, rememberKnowledge, rememberNote, summarize, updateProfile } from './memory.ts';
+import { isRealName, getProfile, isConcept, knownFacts, knowsConcept, normalizePhone, rememberAppliance, rememberJob, rememberKnowledge, rememberNote, summarize, updateProfile } from './memory.ts';
 import { sendWhatsApp, whatsappEnabled } from './notify/whatsapp.ts';
 import { expert, type ExpertFacts } from './expert.ts';
 import { jobDetails, jobSummary } from './history.ts';
@@ -130,10 +130,16 @@ function expertFacts(ctx: CallCtx): ExpertFacts {
   };
 }
 
-/** Gas appliances are licensed-pro work even without a smell; a smell is the 911 path in guards.safetyKeywords. */
-function gasAppliance(text: string): GuardVerdict | null {
-  return /\bgas\b/i.test(text) ? { ok: false, kind: 'safety', action: 'escalated', detail: 'Gas appliance: repairs need a licensed pro. Pro required, no DIY.' } : null;
+/** A hazard the caller stated on a call before any job exists (gas, smoke); gates DIY tests and feeds start_job. */
+const callHazard = new Map<string, GuardVerdict>();
+/** A hazard word within two words after no/not/never/n't is a denial ("I don't smell gas", "no smoke"), not a hazard. */
+const NEGATED_HAZARD = /\b(?:no|not|never|without|[a-z]+n't)\s+(?:(?!(?:it|it's|its|is|that's|thats|are)\b)[\w']+\s+){0,1}(?:smok\w*|fire|gas smell|smell\w* (?:like |of )?gas|smell gas|gas leak|gas|burn\w*|spark\w*)/gi;
+/** guards.safetyKeywords for caller speech, skipping negated mentions. */
+export function transcriptHazard(text: string): GuardVerdict | null {
+  return guards.safetyKeywords(text.replace(NEGATED_HAZARD, ' '));
 }
+/** start_job's model arg: a literal placeholder means no model. */
+const normModel = (m: string) => (/^(unknown|n\/?a|none|null|unsure|not sure|no model|idk)\.?$/i.test(m.trim()) ? '' : m);
 
 function snapshot(job: Job) {
   jobs.update(job.id, () => {});
@@ -230,15 +236,40 @@ function statusLine(job: Job): string {
   }
 }
 
+/** A roster vendor (warranty line / supplier) calling us back, e.g. after a voicemail: attach this call to the job we called them about. */
+function vendorCallback(e: Extract<CallEvent, { kind: 'tool' }>, phone: string): string | null {
+  const roster = safeRoster();
+  if (!roster || !phone) return null;
+  const d = phone.replace(/\D/g, '').slice(-10);
+  const vendor = [roster.warranty, ...roster.suppliers].find((v) => v.phone.replace(/\D/g, '').slice(-10) === d);
+  if (!vendor) return null;
+  const lane: Lane = vendor.id === roster.warranty.id ? 'warranty' : 'supplier';
+  const job = jobs
+    .all()
+    .filter((j) => j.calls.some((c) => (c.lane === 'warranty' || c.lane === 'supplier') && c.to.replace(/\D/g, '').slice(-10) === d))
+    .sort((a, b) => b.updatedAt - a.updatedAt)[0];
+  if (!job) return null;
+  calls.update(e.callId, { lane, vendorId: vendor.id, jobId: job.id });
+  const ctx = calls.get(e.callId) ?? (e.callId.startsWith('sim') ? { mode: 'sim' as const } : null);
+  emit(job.id, 'note', { kind: 'vendor_callback', callId: e.callId, vendor: vendor.name, lane, text: `${vendor.name} called back about ${job.id}.` }, { simulated: ctx?.mode === 'sim' });
+  const facts = `${job.appliance ?? 'appliance'}${job.model ? `, model ${job.model}` : ''}${job.purchaseYear ? `, bought in ${job.purchaseYear}` : ''}, part ${job.part?.partNumber ?? 'unknown'} (${job.part?.name ?? 'part'})`;
+  const ask = lane === 'warranty'
+    ? 'Ask in one sentence whether that part is covered under warranty, then call record_warranty with covered true/false and their exact words as detail.'
+    : 'Ask in one sentence for the price with shipping and when it would arrive, then call record_quote.';
+  return `VENDOR CALLBACK: this is ${vendor.name}, a business returning the call (maybe a voicemail) Fixie made about a customer's ${facts}. Not a customer: don't ask about their appliance or for consent. Thank them for calling back, give those details in one short sentence, and: ${ask} Then thank them and end the call.`;
+}
+
 function handleLookupCaller(e: Extract<CallEvent, { kind: 'tool' }>): string {
   const phone = callerPhone(e);
+  const vendorOut = vendorCallback(e, phone);
+  if (vendorOut) return vendorOut;
   const profile = phone ? getProfile(phone) : undefined;
   const open = openJobFor(e);
   const out = `${summarize(profile)}${open ? ` ${statusLine(open)}\nHistory: ${jobSummary(open)}` : ''}`;
   const known = knownFacts(profile);
-  if (profile?.name) known.unshift(`name: ${profile.name}`);
+  if (isRealName(profile?.name)) known.unshift(`name: ${profile!.name}`);
   for (const a of profile?.appliances ?? []) known.push(`appliance: ${a.appliance} ${a.model}${a.purchaseYear ? ` (${a.purchaseYear})` : ''}`.trim());
-  const returning = out !== 'New caller.';
+  const returning = !out.startsWith('New caller');
   if (open) known.push(`open job ${open.id} (${open.state})`);
   const ctx = calls.get(e.callId) ?? (e.callId.startsWith('sim') ? { mode: 'sim' as const } : null);
   emit(null, 'note', {
@@ -277,7 +308,8 @@ function rememberStartJob(e: Extract<CallEvent, { kind: 'tool' }>): void {
   if (!job || job.kind !== 'consumer') return;
   const name = str(e.args.callerName);
   updateProfile(callerPhone(e) || job.customer.phone, (p) => {
-    if (name) p.name = name;
+    if (isRealName(name)) p.name = name;
+    if (bool(e.args.consentCallback, false)) p.consented = true;
     if (job.model) rememberAppliance(p, { appliance: job.appliance ?? str(e.args.appliance), model: job.model, purchaseYear: job.purchaseYear });
     rememberJob(p, { jobId: job.id, issue: issueOf(job), state: job.state });
   });
@@ -357,14 +389,14 @@ function handleStartJob(e: Extract<CallEvent, { kind: 'tool' }>): string {
   }
   const sim0 = e.callId.startsWith('sim') ? { mode: 'sim' as const } : calls.get(e.callId) ?? null;
   const consentCallback = bool(a.consentCallback, true);
-  const model = str(a.model);
+  const model = normModel(str(a.model));
   const symptom = str(a.symptom);
   const purchaseYear = Number(a.purchaseYear) || undefined;
 
   // The voice model sometimes fires start_job with no arguments, then retries with them. Answering that first call
   // with a cached escalation dead-ended real calls, so with nothing to go on, create nothing and ask for a retry.
   const hasEvidence = Object.keys(diagByCall.get(e.callId)?.state.observations ?? {}).length > 0;
-  if (!model && !getProfile(phone)?.appliances?.at(-1)?.model && !hasEvidence) {
+  if (!model && !getProfile(phone)?.appliances?.at(-1)?.model && !hasEvidence && !callHazard.has(e.callId)) {
     return 'Missing the model number. If you have it, call start_job again with appliance, model, and symptom; otherwise ask them for it first.';
   }
 
@@ -417,7 +449,8 @@ function handleStartJob(e: Extract<CallEvent, { kind: 'tool' }>): string {
   ev(job, 'consent', { callback: consentCallback, callId: e.callId }, sim);
   for (const kind of diag?.acks ?? []) ev(job, 'safety_ack', { kind, callId: e.callId, phase: 'intake', approvedBy: 'caller' }, sim);
 
-  if (diag?.escalated) {
+  const hazard = callHazard.get(e.callId);
+  if (diag?.escalated && !hazard) {
     const why = `Diagnosis stopped: ${diag.state.unknowns} unclear readings. A licensed pro should check this.`;
     ev(job, 'safety', { level: 'pro_required', reason: why, source: 'diagnosis', approvedBy: 'code' }, sim);
     note(job, why, simFlag(job, sim));
@@ -431,7 +464,7 @@ function handleStartJob(e: Extract<CallEvent, { kind: 'tool' }>): string {
   // the caller's remembered appliance, then the part named by the diagnosis evidence gathered on this call.
   const remembered = getProfile(phone)?.appliances?.at(-1);
   let hit = parts.lookup(model || remembered?.model || '', symptom || job.symptom || 'no heat');
-  if (!hit && diag && Object.keys(diag.state.observations).length > 0) {
+  if (!hit && (model || remembered?.model) && diag && Object.keys(diag.state.observations).length > 0) {
     const tree = loadFaultTree(diag.state.faultTree);
     const top = topHypothesis(diag.state);
     const hyp = tree.hypotheses.find((h) => h.id === top.id);
@@ -441,7 +474,7 @@ function handleStartJob(e: Extract<CallEvent, { kind: 'tool' }>): string {
       note(job, `start_job arrived without a model; used the diagnosis lead (${hyp.name}, P=${hit.confidence}).`, simFlag(job, sim));
     }
   }
-  const danger = guards.safetyKeywords(`${symptom} ${str(a.appliance)} ${model}`) ?? gasAppliance(`${symptom} ${str(a.appliance)}`);
+  const danger = guards.safetyKeywords(`${symptom} ${str(a.appliance)} ${model}`) ?? hazard ?? null;
 
   if (!hit) {
     ev(job, 'diagnosis', { appliance: str(a.appliance) || 'appliance', model, issue: 'Unknown: model not in the seeded catalog', confidence: 0, label: 'lookup prior' }, sim);
@@ -610,6 +643,11 @@ function handleRecordTest(e: Extract<CallEvent, { kind: 'tool' }>): string {
 
   const testId = str(e.args.test);
   const reading = str(e.args.reading);
+  const hz = callHazard.get(e.callId);
+  if (hz && testId !== 'has_meter') {
+    entry.escalated = true;
+    return `Stop testing. ${hz.detail} Tell them that plainly, then call start_job so a licensed pro is flagged.`;
+  }
   if (testId === 'has_meter') {
     // A fact about the caller, not evidence: no observation, no unknown, no posterior change.
     const has = meterYes(reading);
@@ -1070,7 +1108,7 @@ function handleInstall(job: Job, ctx: CallCtx, a: Record<string, unknown>): stri
   if (step > prev) jobs.update(job.id, (j) => (j.installStep = step));
   ev(job, 'install_step', { step, of, text: steps[step - 1], callId: ctx.callId }, ctx);
   if (step >= of) return 'That was the last step. Ask them to run it on high for a minute and check it heats, then call report_fix.';
-  return `Step ${step + 1} of ${of}: ${steps[step]}`;
+  return `Next, in your own words with no step numbers (don't say "step" or "done"): ${steps[step]}`;
 }
 
 function handleReportFix(job: Job, ctx: CallCtx, a: Record<string, unknown>): string {
@@ -1086,6 +1124,15 @@ function handleReportFix(job: Job, ctx: CallCtx, a: Record<string, unknown>): st
 }
 
 // ---------- agent's own tools: texting, notes, caller-reported delivery ----------
+/** Phone numbers that appeared in this call's tool results. A text may only contain numbers from here (no invented numbers). */
+const phonesSeen = new Map<string, Set<string>>();
+const PHONE_RE = /(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}\b/g;
+const digits10 = (s: string) => s.replace(/\D/g, '').slice(-10);
+function rememberPhones(callId: string, text: string): void {
+  const set = phonesSeen.get(callId) ?? new Set<string>();
+  for (const m of text.match(PHONE_RE) ?? []) set.add(digits10(m));
+  phonesSeen.set(callId, set);
+}
 const CUSTOMER_LANES: Lane[] = ['user', 'delivery'];
 
 /** Texts the customer on this call, and only them: outbound to the dialed number, inbound to caller ID. Never awaits Twilio. */
@@ -1105,6 +1152,12 @@ function handleSendText(e: Extract<CallEvent, { kind: 'tool' }>): string {
     body = `${body}\n\nHow-to videos for your exact part: https://www.youtube.com/results?search_query=${q}`.trim();
   }
   if (!body) return 'Nothing to send. Say what the text should say.';
+  const allowed = new Set([...(phonesSeen.get(e.callId) ?? []), '6197711086', digits10(to)]);
+  const invented = (body.match(PHONE_RE) ?? []).map(digits10).filter((d) => !allowed.has(d));
+  if (invented.length) {
+    emit(job?.id ?? null, 'guard', { kind: 'safety', action: 'skipped', approvedBy: 'code', reason: `Blocked a text with a phone number not found in any lookup on this call (···${invented[0].slice(-4)}).` });
+    return 'Not sent: that phone number did not come from a search on this call. Use web_search, then text the number exactly as the result shows it.';
+  }
   const sim = ctx?.mode === 'sim' || e.callId.startsWith('sim');
   if (sim || !whatsappEnabled()) {
     emit(job?.id ?? null, 'note', { kind: 'text_sent', to: maskPhone(to), text: body, dryRun: true }, { simulated: sim });
@@ -1166,6 +1219,7 @@ async function handleTool(e: Extract<CallEvent, { kind: 'tool' }>): Promise<stri
   if (e.name === 'web_search') {
     const query = str(e.args.query);
     const out = await webSearch(query);
+    rememberPhones(e.callId, out);
     const ctx = calls.get(e.callId);
     emit(ctx?.jobId ?? null, 'note', { kind: 'web_search', callId: e.callId, query, text: `Searched the web: "${query}"` }, { simulated: ctx?.mode === 'sim' || e.callId.startsWith('sim') });
     return out;
@@ -1324,12 +1378,20 @@ export const orchestrator: Orchestrator = {
         if (ctx && (lane === 'user' || lane === 'delivery')) {
           void expert.onTranscript(ctx, e.role === 'other' ? 'caller' : 'agent', e.text, () => expertFacts(ctx));
         }
+        if (e.role === 'other' && (lane === 'user' || lane === 'delivery')) {
+          const v = transcriptHazard(e.text);
+          if (v && !v.ok && !callHazard.has(e.callId)) callHazard.set(e.callId, v);
+        }
         if (job && e.role === 'other' && (lane === 'user' || lane === 'delivery') && !safetyFlagged.has(e.callId)) {
-          const v = guards.safetyKeywords(e.text);
+          const v = transcriptHazard(e.text);
           if (v && !v.ok) {
             safetyFlagged.add(e.callId);
             ev(job, 'safety', { level: 'pro_required', reason: v.detail, callId: e.callId, source: 'transcript' }, ctx);
             note(job, `Safety keyword heard on the ${lane} call: ${v.detail}`, simFlag(job, ctx));
+            if (lane === 'delivery' && (job.state === 'INSTALLING' || job.state === 'DELIVERED')) {
+              move(job.id, ['INSTALLING', 'DELIVERED'], 'ESCALATED', `safety during install (${v.detail}): stop the DIY walkthrough, refer a licensed pro`, 'code');
+              note(job, 'Dispatch: licensed appliance repair visit (smoke/burning during install). Booking is manual in the demo; automatic in the full version.', simFlag(job, ctx));
+            }
           }
         }
         return undefined;
@@ -1412,6 +1474,7 @@ export const orchestrator: Orchestrator = {
     guardsFired.clear();
     voicemailsSkipped.clear();
     diagByCall.clear();
+    callHazard.clear();
     inboundAttached.clear();
     expert.reset();
     onlinePending.clear();

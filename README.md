@@ -59,14 +59,15 @@ The judge board in `web/` shows live call lanes and transcripts, the quote table
 ## Quickstart
 
 ```bash
-cd server && npm i && cp .env.example .env
+cp .env.example .env    # the one secrets file, shared by server/ and site/
+cd server && npm i
 DRY_RUN=1 npm start     # no keys needed; every call is simulated
 npm run demo:sim        # in a second terminal: NEW -> FIXED, asserting the guard events fired
 npm run verify          # checks the run end to end
 ```
 
 **Go live (about 15 minutes):**
-1. Create the Vapi, Twilio, ElevenLabs and Anthropic keys and fill in `server/.env`: [docs/KEYS.md](docs/KEYS.md).
+1. Create the Vapi, Twilio, ElevenLabs and Anthropic keys and fill in the root `.env`: [docs/KEYS.md](docs/KEYS.md).
 2. Start a tunnel, set `PUBLIC_URL`, and run `npm run setup:vapi` and `npm run preflight`.
 3. Make a real call and check each lane against [docs/VERIFY.md](docs/VERIFY.md).
 

@@ -1,20 +1,12 @@
 // Creates a test-mode "Fixie Family Plan" ($9/mo) product and price, then prints the price id.
-// Usage: npm run stripe:create   (reads STRIPE_SECRET_KEY from site/.env.local or the environment; use an sk_test_ key)
-import { readFileSync } from 'node:fs';
+// Usage: npm run stripe:create   (reads STRIPE_SECRET_KEY from the repo-root .env or the environment; use an sk_test_ key)
+import nextEnv from '@next/env';
 
-function loadEnvLocal() {
-  try {
-    for (const line of readFileSync(new URL('../.env.local', import.meta.url), 'utf8').split('\n')) {
-      const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
-      if (m && !(m[1] in process.env)) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '');
-    }
-  } catch {}
-}
-loadEnvLocal();
+nextEnv.loadEnvConfig(new URL('../..', import.meta.url).pathname);
 
 const key = process.env.STRIPE_SECRET_KEY;
 if (!key) {
-  console.error('Set STRIPE_SECRET_KEY (an sk_test_ key) in site/.env.local first.');
+  console.error('Set STRIPE_SECRET_KEY (an sk_test_ key) in the repo-root .env first.');
   process.exit(1);
 }
 if (!key.startsWith('sk_test_')) {
@@ -44,4 +36,4 @@ const price = await stripe('prices', {
   'recurring[interval]': 'month',
 });
 console.log('Created "Fixie Family Plan" at $9/month (test mode).');
-console.log(`Add this line to site/.env.local:\nSTRIPE_PRICE_ID=${price.id}`);
+console.log(`Add this line to the repo-root .env:\nSTRIPE_PRICE_ID=${price.id}`);

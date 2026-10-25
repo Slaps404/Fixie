@@ -1041,7 +1041,7 @@
   });
 
   // ---------- Admin actions (hidden hotkeys) ----------
-  // Served by web/serve.mjs, POST /admin/<path> is proxied to the server with x-admin taken from server/.env,
+  // Served by web/serve.mjs, POST /admin/<path> is proxied to the server with x-admin taken from the repo-root .env,
   // so the token never reaches the browser. Without the proxy, fall back to a token passed once as #admin=… .
   const hashAdmin = new URLSearchParams(location.hash.slice(1)).get('admin');
   if (hashAdmin) { sessionStorage.setItem('fixieAdmin', hashAdmin); history.replaceState(null, '', location.pathname + location.search); }

@@ -1,5 +1,5 @@
 // One-time Vapi setup: create (or update) the persistent intake assistant and attach it to the phone number.
-// Usage: npm run setup:vapi   (needs VAPI_API_KEY, VAPI_PHONE_NUMBER_ID, PUBLIC_URL in server/.env)
+// Usage: npm run setup:vapi   (needs VAPI_API_KEY, VAPI_PHONE_NUMBER_ID, PUBLIC_URL in the repo-root .env)
 import { config } from '../src/config.ts';
 import { buildIntakeAssistant, webhookUrl } from '../src/vapi/assistants.ts';
 import { vapiFetch } from '../src/vapi/client.ts';
@@ -28,7 +28,7 @@ async function main(): Promise<void> {
   console.log(`Attached assistant to phone number ${config.vapi.phoneNumberId}`);
 
   if (!config.vapi.intakeAssistantId) {
-    console.log('\nAdd this line to server/.env:\n');
+    console.log('\nAdd this line to the repo-root .env:\n');
     console.log(`VAPI_INTAKE_ASSISTANT_ID=${id}\n`);
   }
 }

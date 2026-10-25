@@ -35,7 +35,7 @@ cmd_launch() {
   ln -s "$REPO/server/node_modules" "$RUN/server/node_modules"
   # Entry renamed (and tsx loaded via NODE_OPTIONS) so other sessions' `pkill -f tsx` / `pkill -f index.ts` miss us.
   echo "import './index.ts';" > "$RUN/server/src/fixie-verify-main.ts"
-  cp -r "$REPO/server/data/parts.json" "$REPO/server/data/faults" "$RUN/server/data/"
+  cp -r "$REPO/server/data/parts.json" "$REPO/server/data/online-prices.json" "$REPO/server/data/faults" "$RUN/server/data/"
   # Fake 555 roster only, never the real roster.json (it holds teammates' phones).
   cp "$REPO/server/data/roster.example.json" "$RUN/server/data/roster.json"
   echo "$port" > "$RUN/port"; echo "$RUN_ID" > "$STATE_ROOT/current"
@@ -155,15 +155,16 @@ cmd_capture() {
 # This is the production boundary (Vapi -> /vapi/webhook), not a test-only route. Prints the tool result.
 cmd_probe_install() {
   need_run
-  local step="${1:?step number}" job epoch
+  local step="${1:?step number}" job epoch rnd
   job="$(curl -fsS "$BASE/jobs" | jq -r 'sort_by(.createdAt) | last | .id')"
   epoch="$(cat "$RUN/epoch" 2>/dev/null || echo 1)"
-  jq -nc --arg j "$job" --argjson e "$epoch" --argjson s "$step" '{message:{type:"tool-calls",
+  rnd="$RANDOM$RANDOM"
+  jq -nc --arg j "$job" --arg r "$rnd" --argjson e "$epoch" --argjson s "$step" '{message:{type:"tool-calls",
     call:{id:"probe_\($j)_\($s)",name:"\($j)||delivery",type:"outboundPhoneCall",customer:{number:"+16195550100"},
           assistant:{metadata:{jobId:$j,lane:"delivery",epoch:$e}}},
-    toolCallList:[{id:"tc_probe_\($s)",type:"function",function:{name:"install_progress",arguments:{step:$s}}}],
+    toolCallList:[{id:"tc_probe_\($j)_\($s)_\($e)_\($r)",type:"function",function:{name:"install_progress",arguments:{step:$s}}}],
     toolWithToolCallList:[{type:"function",function:{name:"install_progress"},
-      toolCall:{id:"tc_probe_\($s)",type:"function",function:{name:"install_progress",arguments:{step:$s}}}}]}}' \
+      toolCall:{id:"tc_probe_\($j)_\($s)_\($e)_\($r)",type:"function",function:{name:"install_progress",arguments:{step:$s}}}}]}}' \
   | curl -sS -H 'Content-Type: application/json' -d @- "$BASE/vapi/webhook" | jq -r '.results[0].result'
 }
 

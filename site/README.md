@@ -5,8 +5,8 @@ Landing page, phone-and-card signup, and an operator dashboard for Fixie. Next.j
 ## Run
 
 ```bash
+cp .env.example .env         # repo root; the one secrets file, shared with server/
 cd site
-cp .env.example .env.local   # then fill in the values
 npm install
 npm run dev                  # http://localhost:3100
 ```
@@ -30,7 +30,7 @@ The cookie only proves control of a phone number. Anyone with a session can see 
 
 ## Keys
 
-See `.env.example`. One-time setup scripts, both read `.env.local` and never print secrets:
+See the root `.env.example`. One-time setup scripts, both read the root `.env` and never print secrets:
 
 ```bash
 npm run verify:create   # makes a Twilio Verify service, prints TWILIO_VERIFY_SERVICE_SID

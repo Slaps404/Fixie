@@ -4,7 +4,7 @@
 // DRY_RUN=1 server on a free port ≥ 3300, so orchestrator + guards answer exactly as they would on a live call.
 // Caller side: Claude personas that also report their physical state each turn (ground truth for scoring).
 // Usage: npm run eval:install            EVAL_REPS=3 EVAL_PERSONAS=burning,skipper EVAL_KEEP=1
-import 'dotenv/config';
+import '../src/env.ts';
 import Anthropic from '@anthropic-ai/sdk';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -457,7 +457,7 @@ async function pool<T, R>(items: T[], n: number, fn: (t: T) => Promise<R>): Prom
 }
 
 async function main() {
-  if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY is not set (server/.env via dotenv)');
+  if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY is not set (the repo-root .env via dotenv)');
   const only = process.env.EVAL_PERSONAS?.split(',').filter(Boolean);
   const personas = only ? PERSONAS.filter((p) => only.includes(p.id)) : PERSONAS;
   const catalog = JSON.parse(readFileSync(join(SERVER_DIR, 'data', 'parts.json'), 'utf8'));

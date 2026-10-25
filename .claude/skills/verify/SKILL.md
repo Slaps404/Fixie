@@ -16,7 +16,7 @@ S=.claude/skills/verify/scripts/fixie-verify.sh
 ## Safety rules (read first)
 
 - **Never place live calls from a verification run.** The helper runs a *copy* of `server/` with no `.env`, `DRY_RUN=1`, empty `VAPI_API_KEY`, and the fake `555` roster (`data/roster.example.json`). `doctor` refuses to pass unless `dryRun:true`. Live lanes (real phones, real Vapi spend) need the user's explicit go-ahead each time. See [features/live-lanes.md](features/live-lanes.md).
-- **Never read `server/.env`.** Project settings deny it, and a hook guards secrets.
+- **Never read the root `.env`.** Project settings deny it, and a hook guards secrets.
 - **Never drive the dev instance** (`:3000`, `server/data/`). Other Claude sessions and the teammate's board use it. The verify instance runs on `:3100` by default, with its own data dir.
 
 ## Launch

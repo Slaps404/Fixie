@@ -1,5 +1,6 @@
 import { Geist, Geist_Mono } from 'next/font/google';
-import { AGENT, FAULT, WARM, FixieConsole, contours, terrain, waveform } from '@/components/FixieConsole';
+import { AGENT, WARM, FixieConsole, waveform } from '@/components/FixieConsole';
+import { ScrollEffects } from '@/components/ScrollEffects';
 
 const geist = Geist({ subsets: ['latin'], weight: ['300', '400', '500'] });
 const mono = Geist_Mono({ subsets: ['latin'], weight: ['400', '500'] });
@@ -34,9 +35,32 @@ const rows = [
   return { ...row, d };
 });
 
-const heroRings = contours(980, 120, 9, 30, 26, 1.4);
-const ctaRings = contours(640, 200, 10, 24, 24, 3.1);
-const ctaTerrain = terrain(1200, 400, 10);
+// Speech-shaped bar heights (0–1): a run of syllable bumps with jitter.
+function speech(n: number, seed: number) {
+  const syllables = [0.06, 0.17, 0.26, 0.38, 0.47, 0.6, 0.71, 0.83, 0.93];
+  return Array.from({ length: n }, (_, i) => {
+    const t = i / n;
+    const env = Math.max(
+      ...syllables.map((c, k) => Math.exp(-(((t - c) / 0.045) ** 2)) * (0.5 + 0.5 * Math.abs(Math.sin(k * 2.3 + seed)))),
+    );
+    return 0.08 + 0.92 * env * (0.55 + 0.45 * Math.abs(Math.sin(i * 1.7 + seed)));
+  });
+}
+
+// A voice coming down the line: rounded bars that keep talking (motion permitting).
+function VoiceLine({ bars, seed, color, className }: { bars: number; seed: number; color: string; className: string }) {
+  return (
+    <div className={`items-center gap-[5px] overflow-hidden ${className}`} aria-hidden>
+      {speech(bars, seed).map((h, i) => (
+        <span
+          key={i}
+          className="w-[3px] shrink-0 rounded-full motion-safe:animate-[fixie-talk_1.8s_ease-in-out_infinite]"
+          style={{ height: `${(h * 100).toFixed(1)}%`, background: color, animationDelay: `${(-i * 0.07).toFixed(2)}s` }}
+        />
+      ))}
+    </div>
+  );
+}
 
 const guards = [
   { value: '$40', label: 'Most it will spend on a part, shipping included' },
@@ -98,14 +122,8 @@ export default function Home() {
       <main>
         {/* Hero */}
         <section className="relative overflow-hidden">
-          <svg viewBox="0 0 1200 520" className="pointer-events-none absolute inset-0 h-full w-full" preserveAspectRatio="xMidYMin slice" aria-hidden>
-            {heroRings.map((d, i) => (
-              <path key={i} d={d} fill="none" stroke={i < 3 ? FAULT : '#EDEDED'} strokeOpacity={i < 3 ? 0.35 - i * 0.08 : 0.07} />
-            ))}
-          </svg>
           <div className="relative mx-auto max-w-[1200px] px-5 pb-14 pt-16 sm:pt-24">
-            <span className={`${mono.className} text-[12px] text-[#8E8E93]`}>Any phone · No app · No account page</span>
-            <h1 className="mt-5 max-w-[860px] text-[42px] font-light leading-[1.04] tracking-[-0.03em] sm:text-[68px]">
+            <h1 className="max-w-[860px] text-[42px] font-light leading-[1.04] tracking-[-0.03em] sm:text-[68px]">
               Something broke? Call one number.
               <span className="text-[#8E8E93]"> Fixie finds the part and talks you through the fix.</span>
             </h1>
@@ -128,21 +146,21 @@ export default function Home() {
         {/* Console */}
         <section className="mx-auto max-w-[1200px] px-3 sm:px-5" aria-label="What Fixie does behind the call">
           <FixieConsole />
-          <p className="mx-auto mt-4 max-w-[640px] text-center text-[13px] text-[#8E8E93]">
-            What Fixie is doing for Dorothy. She never sees any of it. She just gets a phone call.
+          <p className="reveal mx-auto mt-4 max-w-[640px] text-center text-[13px] text-[#8E8E93]">
+            Dorothy only hears the phone calls. Everything on the right happens without her.
           </p>
         </section>
 
         {/* How it works */}
         <section className="mx-auto max-w-[1200px] px-3 pt-28 sm:px-5" aria-labelledby="how">
-          <div className="px-2">
+          <div className="reveal px-2">
             <span className={label}>How it works</span>
             <h2 id="how" className="mt-3 max-w-[640px] text-[32px] font-light leading-[1.1] tracking-[-0.02em] sm:text-[40px]">
               Three steps, all of them on the phone.
             </h2>
           </div>
-          <div className="mt-8 grid grid-cols-1 gap-[10px] md:grid-cols-3">
-            <div className={`${card} flex flex-col overflow-hidden`}>
+          <div className="reveal-group mt-8 grid grid-cols-1 gap-[10px] md:grid-cols-3">
+            <div className={`${card} reveal flex flex-col overflow-hidden`}>
               <svg viewBox="0 0 360 260" className="block h-auto w-full" aria-hidden>
                 {arcs.map((a) => (
                   <path
@@ -167,7 +185,7 @@ export default function Home() {
               </div>
             </div>
 
-            <div className={`${card} flex flex-col overflow-hidden`}>
+            <div className={`${card} reveal flex flex-col overflow-hidden`}>
               <svg viewBox="0 0 360 260" className="block h-auto w-full" aria-hidden>
                 <g transform="translate(28 0)">
                   <path d={callWave.quiet} stroke="#3A3A3E" strokeWidth="1.6" strokeLinecap="round" />
@@ -189,7 +207,7 @@ export default function Home() {
               </div>
             </div>
 
-            <div className={`${card} flex flex-col overflow-hidden`}>
+            <div className={`${card} reveal flex flex-col overflow-hidden`}>
               <svg viewBox="0 0 360 260" className="block h-auto w-full" aria-hidden>
                 {rows.map((row) => (
                   <g key={row.label}>
@@ -214,7 +232,7 @@ export default function Home() {
         {/* Guardrails */}
         <section className="mx-auto max-w-[1200px] px-3 pt-28 sm:px-5" aria-labelledby="guards">
           <div className="grid gap-8 px-2 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
-            <div>
+            <div className="reveal">
               <span className={label}>Guardrails</span>
               <h2 id="guards" className="mt-3 text-[32px] font-light leading-[1.1] tracking-[-0.02em] sm:text-[40px]">
                 The limits live in code, not in a prompt.
@@ -223,9 +241,9 @@ export default function Home() {
                 Nothing is ordered without your spoken yes. No step that needs power until the dryer is unplugged.
               </p>
             </div>
-            <div className="grid grid-cols-2 gap-[10px]">
+            <div className="reveal-group grid grid-cols-2 gap-[10px]">
               {guards.map((g) => (
-                <div key={g.label} className={`${card} flex flex-col justify-between gap-6 p-6`}>
+                <div key={g.label} className={`${card} reveal flex flex-col justify-between gap-6 p-6`}>
                   <span className="text-[44px] font-light leading-none tracking-[-0.03em]">{g.value}</span>
                   <span className="text-[13.5px] leading-[1.45] text-[#A1A1A6]">{g.label}</span>
                 </div>
@@ -236,15 +254,13 @@ export default function Home() {
 
         {/* Closing CTA */}
         <section className="mx-auto max-w-[1200px] px-3 py-28 sm:px-5">
-          <div className={`${card} relative overflow-hidden`}>
-            <svg viewBox="0 0 1200 400" className="pointer-events-none absolute inset-0 h-full w-full" preserveAspectRatio="xMidYMid slice" aria-hidden>
-              {ctaTerrain.map((d, i) => (
-                <path key={i} d={d} fill="none" stroke="#EDEDED" strokeOpacity="0.05" />
-              ))}
-              {ctaRings.map((d, i) => (
-                <path key={i} d={d} fill="none" stroke={i < 4 ? WARM : AGENT} strokeOpacity={i < 4 ? 0.5 - i * 0.1 : 0.22} />
-              ))}
-            </svg>
+          <div className={`${card} reveal relative overflow-hidden`}>
+            <VoiceLine
+              bars={150}
+              seed={3}
+              color={AGENT}
+              className="pointer-events-none absolute inset-x-0 top-1/2 flex h-48 -translate-y-1/2 justify-center opacity-40 [mask-image:linear-gradient(to_right,transparent_2%,black_18%,transparent_34%,transparent_66%,black_82%,transparent_98%)]"
+            />
             <div className="relative flex flex-col items-center px-6 py-20 text-center">
               <span className={label}>Save this number</span>
               <h2 className="mt-4 max-w-[640px] text-[34px] font-light leading-[1.08] tracking-[-0.025em] sm:text-[48px]">
@@ -268,6 +284,7 @@ export default function Home() {
           <span>Fixie · Built at c0mpiled-16 UCSD</span>
         </div>
       </footer>
+      <ScrollEffects />
     </div>
   );
 }

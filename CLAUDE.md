@@ -6,4 +6,4 @@
 - To pick up server code changes, run **`server/scripts/safe-restart.sh`**. It waits until Vapi reports no active calls (max 10 min).
 - For testing, run your own instance with `DRY_RUN=1` on a port ≥ 3200 (or use the `verify` skill), and kill only that exact PID.
 - Logs: `journalctl -u fixie -f` (watchdog), `/var/log/fixie-server.log` (server). Current public URL: `/run/fixie/public-url`.
-- Never read `server/.env`.
+- Never read the root `.env`.

@@ -1,5 +1,5 @@
 // Live Exa vendor discovery. `npx tsx scripts/vendors.ts [appliance] [--write-cache]`
-import 'dotenv/config';
+import '../src/env.ts';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DATA_DIR } from '../src/config.ts';

@@ -85,7 +85,7 @@
     <div id="events"></div>
   </section>
   <section><h2>System</h2><div id="system"></div></section>
-  <section><h2>Customer memory <small>data/customers.json</small></h2><div id="customers"></div></section>
+  <section><h2>Customers</h2><div id="customers"></div></section>
   <section class="wide"><h2>Server log <small>last 50 lines, redacted</small></h2><pre class="log" id="log"></pre></section>
 </main>
 <div id="toast"></div>
@@ -193,11 +193,8 @@ function renderSystem(s) {
   log.textContent = s.log.join('\n'); if (atEnd) log.scrollTop = log.scrollHeight;
 }
 
-function renderCustomers(c) {
-  if (!c.exists) { $('customers').innerHTML = '<div class="muted">No customers.json yet.</div>'; return; }
-  const d = c.data;
-  const entries = Array.isArray(d) ? d.map((v, i) => [String(i + 1), v]) : d && typeof d === 'object' ? Object.entries(d) : [['value', d]];
-  $('customers').innerHTML = entries.length ? entries.map(([k, v]) => '<div class="card"><b class="mono">' + esc(k) + '</b><pre class="mono" style="margin:4px 0 0;white-space:pre-wrap">' + esc(typeof v === 'string' ? v : JSON.stringify(v, null, 2)) + '</pre></div>').join('') : '<div class="muted">Empty.</div>';
+function renderCustomers(list) {
+  $('customers').innerHTML = list.length ? list.map((c) => '<div class="card"><b>' + esc(c.name || c.phone) + '</b> <span class="mono muted">' + esc(c.phone) + '</span><pre class="mono" style="margin:4px 0 0;white-space:pre-wrap">' + esc(JSON.stringify({ appliances: c.appliances, jobs: c.jobs, notes: c.notes }, null, 2)) + '</pre></div>').join('') : '<div class="muted">No customers yet.</div>';
 }
 
 async function refresh() {

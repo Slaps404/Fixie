@@ -2,7 +2,7 @@
 // charge it at the supplier through Lithic's authorization simulator, then prove the issuer (not Fixie) blocks
 // a second merchant and anything over the cap. Usage: npm run order:test [-- --online]
 // --online orders from the best web quote instead (live Claude web search, cached table as fallback), Amazon first.
-import 'dotenv/config';
+import '../src/env.ts';
 import { getOnlineQuotes, toQuote } from '../src/commerce/online-quotes.ts';
 import { chargeSimulated, lithicIssuer, lithicSimulatedMerchant } from '../src/commerce/lithic.ts';
 import { placeOrder, type CommerceDeps } from '../src/commerce/place-order.ts';
@@ -38,7 +38,7 @@ if (process.argv.includes('--online')) {
 
 const key = process.env.LITHIC_API_KEY;
 if (!key) {
-  console.error('LITHIC_API_KEY is not set. Create a sandbox key at https://app.lithic.com (Sandbox → API keys) and add it to server/.env.');
+  console.error('LITHIC_API_KEY is not set. Create a sandbox key at https://app.lithic.com (Sandbox → API keys) and add it to the repo-root .env.');
   process.exit(2);
 }
 

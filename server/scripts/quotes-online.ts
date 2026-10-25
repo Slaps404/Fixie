@@ -1,6 +1,6 @@
 // Live online price check for the demo part. Usage: npm run quotes:online [-- --write-cache]
 // --write-cache stores the verified live listings in data/online-prices.json, the fallback when a live lookup fails.
-import 'dotenv/config';
+import '../src/env.ts';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { DATA_DIR } from '../src/config.ts';

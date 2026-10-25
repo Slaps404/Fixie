@@ -185,4 +185,4 @@ See `docs/review/SYNTHESIS.md` §3, adopted with these edits:
   - Every role-play phone saves the Twilio number as the contact "Fixie", with Silence Unknown Callers and Focus off.
   - Test-call each phone at 4:00 in the MPR. Bring a hotspot.
   - Dorothy's audio goes through a speaker puck or headset into the PA, never a speakerphone near the crowd.
-- Secrets live in `server/.env` (gitignored). `server/data/roster.json` (real phone numbers) is gitignored.
+- Secrets live in the root `.env` (gitignored). `server/data/roster.json` (real phone numbers) is gitignored.

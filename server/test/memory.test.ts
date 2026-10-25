@@ -49,8 +49,8 @@ test('summarize: returning caller gets a greeting, appliance, and what they do n
   assert.match(s, /Greet: "Welcome back, Bao! It's Fixie again\."/);
   assert.match(s, /Whirlpool dryer WED4815EW/);
   assert.match(s, /Doesn't know: breaker box, so assume not fuse, multimeter, continuity test either\. Use plain words/);
-  assert.equal(summarize(undefined), 'New caller.');
-  assert.equal(summarize(blank()), 'New caller.');
+  assert.equal(summarize(undefined), 'New caller. Consent: not yet given.');
+  assert.equal(summarize(blank()), 'New caller. Consent: not yet given.');
 });
 
 test('summarize: names what the caller does know, including inferred concepts', () => {
@@ -74,7 +74,7 @@ const driven = driveWebhook();
 test('webhook: knowledge recorded on one call is reported on the next call from the same phone', () => {
   assert.equal(driven.recorded, 'Noted.');
   assert.match(driven.lookupSamePhone, /Doesn't know: breaker box, so assume not fuse, multimeter, continuity test either/);
-  assert.equal(driven.lookupOtherPhone, 'New caller.');
+  assert.equal(driven.lookupOtherPhone, 'New caller. Consent: not yet given.');
   assert.equal(driven.unknownConcept, 'Noted.');
 });
 
@@ -141,7 +141,7 @@ test('webhook: a caller whose part arrived can install on an inbound call, get a
   assert.match(driven.delivered, /^Delivered\. Install is \d+ steps/);
   assert.equal(driven.deliveredState, 'DELIVERED');
   assert.match(driven.delivered, /safety_ack/);
-  assert.match(driven.installStep1, /^Step 2 of \d+/);
+  assert.match(driven.installStep1, /^Next, in your own words.*Disconnect the vent hose/);
   assert.equal(driven.installState, 'INSTALLING');
   assert.equal(driven.text, 'Text sent.');
   assert.equal(driven.note, 'Saved.');

@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import './env.ts';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -44,7 +44,7 @@ export const config = {
     user: num(process.env.MAXSEC_USER, 90),
     warranty: num(process.env.MAXSEC_WARRANTY, 120),
     supplier: num(process.env.MAXSEC_SUPPLIER, 120),
-    delivery: num(process.env.MAXSEC_DELIVERY, 480),
+    delivery: num(process.env.MAXSEC_DELIVERY, 1800),
     tech: num(process.env.MAXSEC_TECH, 60),
   } as Record<Lane, number>,
   /** Sim speed multiplier: 1 = realistic call timing, 4 = fast rehearsal. */

@@ -8,7 +8,7 @@ import { onEvent } from '../src/events.ts';
 import { buildExpertPrompt, expert, setExpertModel, stubNote, type ExpertFacts, type ExpertModel, type Line } from '../src/expert.ts';
 import type { FixieEvent } from '../src/types.ts';
 
-const facts: ExpertFacts = { lane: 'intake', memory: 'New caller.', diagnosis: initialState(loadFaultTree('dryer_no_heat')) };
+const facts: ExpertFacts = { lane: 'intake', memory: 'New caller. Consent: not yet given.', diagnosis: initialState(loadFaultTree('dryer_no_heat')) };
 
 function ctxFor(callId: string, controlUrl?: string): CallCtx {
   return { callId, jobId: null, lane: 'user', to: '+16195550100', maxSec: 300, mode: 'sim', epoch: 1, state: 'live', createdAt: Date.now(), quoted: false, attempt: 1, controlUrl };

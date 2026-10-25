@@ -268,7 +268,7 @@ test('buildAssistant matches the SPEC §6 shape', () => {
   const rt = intake.model.tools.find((t: any) => t.function?.name === 'record_test').function;
   assert.deepEqual(rt.parameters.required, ['test', 'reading']);
   assert.match(intake.model.messages[0].content, /record_test/);
-  assert.match(intake.firstMessage, /AI assistant\. This call is recorded/);
+  assert.match(intake.firstMessage, /recorded line/);
   assert.ok(toolNames.includes('lookup_caller'));
   const lc = intake.model.tools.find((t: any) => t.function?.name === 'lookup_caller').function;
   assert.deepEqual(lc.parameters.properties, {});

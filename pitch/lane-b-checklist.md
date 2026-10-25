@@ -1,7 +1,7 @@
 # Lane B checklist (human-only tasks): Fixie
 
-## ⚡ 1. API keys → `server/.env` (follow `docs/KEYS.md`)
-**Keys go straight into `server/.env` on the T3 box** (gitignored). Never paste them into any chat, including Claude, and don't send them to Jianan.
+## ⚡ 1. API keys → the root `.env` (follow `docs/KEYS.md`)
+**Keys go straight into the root `.env` on the T3 box** (gitignored). Never paste them into any chat, including Claude, and don't send them to Jianan.
 - [ ] Vapi: add $20 credit → **Private** API key → `VAPI_API_KEY=`
 - [ ] Twilio: paid upgrade + 619/858 Voice number ✅
 - [ ] Vapi → Phone Numbers → Import → Twilio. Paste the **Account SID (`AC…`) + Auth Token** into the Vapi form only. Copy the Phone Number ID → `VAPI_PHONE_NUMBER_ID=`

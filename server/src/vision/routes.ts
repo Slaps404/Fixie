@@ -6,6 +6,7 @@ import express from 'express';
 import type { Express, NextFunction, Request, Response } from 'express';
 import { config } from '../config.ts';
 import { maskPhone } from '../events.ts';
+import { recordMessage } from '../admin/messages.ts';
 import { vemit as emit } from './emit.ts';
 import { jobs } from '../jobs.ts';
 import { lookUrl, startVisualSession } from './api.ts';
@@ -177,6 +178,24 @@ const twiml = (msg?: string) => `<?xml version="1.0" encoding="UTF-8"?><Response
 
 // ---------------------------------------------------------------- routes
 
+/** Operator log of what customers text us. Twilio sends WhatsApp replies through the same webhook with a `whatsapp:` prefix. */
+function recordInboundText(p: Record<string, string>): void {
+  const body = (p.Body ?? '').trim();
+  const from = p.From ?? '';
+  if (!body || !from) return;
+  const phone = from.replace(/^whatsapp:/, '');
+  recordMessage({
+    direction: 'in',
+    channel: from.startsWith('whatsapp:') ? 'whatsapp' : 'sms',
+    phone,
+    body,
+    status: 'received',
+    reason: null,
+    source: 'inbound',
+    jobId: jobs.byCaller(phone)?.id ?? null,
+  });
+}
+
 export function register(app: Express): void {
   // Admin: create a session (what the request_visual tool does via startVisualSession()).
   app.post('/vision/session', admin, async (req, res) => {
@@ -287,6 +306,7 @@ export function register(app: Express): void {
         return void res.status(403).type('text/xml').send(twiml());
       }
     }
+    recordInboundText(params);
     const r = await handleInboundMms(params);
     // Replies are outbound SMS too (best effort; may be filtered on an unregistered number).
     res.type('text/xml').send(twiml(r.accepted.length ? 'Got your photo. Fixie is looking now.' : undefined));

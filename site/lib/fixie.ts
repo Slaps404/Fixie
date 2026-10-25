@@ -6,6 +6,6 @@ export const API_URL = (process.env.FIXIE_API_URL || 'http://localhost:3000').re
 export function backend(path: string, init: RequestInit & { admin?: boolean } = {}) {
   const { admin, headers, ...rest } = init;
   const h = new Headers(headers);
-  if (admin) h.set('x-admin', process.env.FIXIE_ADMIN_TOKEN || '');
+  if (admin) h.set('x-admin', process.env.ADMIN_TOKEN || '');
   return fetch(`${API_URL}${path}`, { ...rest, headers: h, cache: 'no-store' });
 }

@@ -203,7 +203,7 @@ const CUSTOMER_TOOLS: ToolName[] = [
   'web_search',
 ];
 const LANE_TOOLS: Record<Lane | 'intake', ToolName[]> = {
-  intake: ['lookup_caller', 'start_job', 'record_test', ...CUSTOMER_TOOLS],
+  intake: ['lookup_caller', 'start_job', 'record_test', 'record_warranty', 'record_quote', ...CUSTOMER_TOOLS],
   warranty: ['record_warranty', 'end_call'],
   supplier: ['record_quote', 'end_call'],
   user: CUSTOMER_TOOLS,
@@ -234,7 +234,7 @@ export function toolsFor(lane: Lane | 'intake'): object[] {
 const SILENCE_SEC: Record<Lane | 'intake', number> = {
   intake: 45,
   user: 30,
-  delivery: 60,
+  delivery: 600,
   supplier: 15,
   warranty: 15,
   tech: 15,
@@ -257,7 +257,7 @@ const GONE_QUIET = speechTimeout(
   5,
   "The caller has gone quiet. In under 12 words: if you were cut off, say 'Sorry, go ahead' and repeat your last question; otherwise gently repeat your last question.",
 );
-const WORKING_QUIET = speechTimeout(25, "The caller is quiet, probably working. In under 12 words, ask if they're still on that step or need help.");
+const WORKING_QUIET = speechTimeout(45, "The caller is quiet because they're working with their hands. Say only: 'Take your time, I'm right here.' Never end the call for silence.");
 
 /** Conversational lanes: ignore 1-2 word noise (2 let line noise cut the bot off mid-sentence on live calls), wait a beat before replying, denoise the line. Machine lanes keep Vapi defaults. */
 const CONVERSATION_TUNING = {

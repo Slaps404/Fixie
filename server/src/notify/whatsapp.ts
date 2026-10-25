@@ -55,6 +55,23 @@ export function register(_app: Express): void {
         job.id,
       );
     }
+    if (ev.type === 'best_deal') {
+      const total = usd(ev.data.landedTotal ?? ev.data.price);
+      const eta = typeof ev.data.eta === 'string' && ev.data.eta ? `, arrives ${ev.data.eta}` : '';
+      void sendWhatsApp(
+        job.customer.phone,
+        `☀️ Fixie found the part for your ${appliance}: ${total} with shipping${eta}. I'm calling you now to confirm, or call (619) 771-1086 anytime and say "order it".`,
+        job.id,
+      );
+    }
+    if (ev.type === 'call_ended' && ev.data.lane === 'user' && job.state === 'AWAITING_CONFIRMATION' && ['no_answer', 'voicemail'].includes(String(ev.data.reason))) {
+      const total = usd(job.bestDeal?.landedTotal);
+      void sendWhatsApp(
+        job.customer.phone,
+        `Missed you! Your ${appliance} part${total ? ` is ${total} and` : ' is'} ready to order. Call (619) 771-1086 and say "order it".`,
+        job.id,
+      );
+    }
     if (ev.type === 'fix_verified' && ev.data.ok) {
       void sendWhatsApp(job.customer.phone, `🎉 Your ${appliance} is fixed! Remember to keep the vent clear. Fixie is here anytime: (619) 771-1086.`, job.id);
     }

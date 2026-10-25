@@ -29,4 +29,31 @@ html { font-size: 18px; }
 
 @keyframes fixie-ring { 0% { transform: scale(1); opacity: .6; } 100% { transform: scale(1.7); opacity: 0; } }
 @keyframes fixie-arc { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+@keyframes fixie-talk { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(0.35); } }
 @keyframes fixie-route { to { stroke-dashoffset: -14; } }
+
+/* Scroll effects. Hidden states only apply once the `js` class is on <html>
+   (set in layout.tsx) and motion is allowed; ScrollEffects reveals them, one
+   way only. Without JS, or with reduced motion, the page is static. */
+
+@media (prefers-reduced-motion: no-preference) {
+  .js .reveal {
+    opacity: 0;
+    transform: translateY(28px);
+    transition: opacity 0.8s ease, transform 0.8s cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+  .js .reveal.is-in { opacity: 1; transform: none; }
+  .js .reveal-group > .reveal:nth-child(2) { transition-delay: 0.1s; }
+  .js .reveal-group > .reveal:nth-child(3) { transition-delay: 0.2s; }
+  .js .reveal-group > .reveal:nth-child(4) { transition-delay: 0.3s; }
+
+  /* Transcript: --p comes from the moment, --a/--b from each word or label. */
+  .js .tx-word, .js .tx-in, .js .tx-slide {
+    --t: clamp(0, (var(--p, 0) - var(--a)) / (var(--b) - var(--a)), 1);
+    opacity: var(--t);
+    transition: opacity 0.3s ease, filter 0.3s ease, transform 0.3s ease;
+  }
+  .js .tx-word { filter: blur(calc((1 - var(--t)) * 4px)); }
+  .js .tx-in { transform: translateY(calc((1 - var(--t)) * 6px)); }
+  .js .tx-slide { transform: translateX(calc((1 - var(--t)) * -16px)); }
+}

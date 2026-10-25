@@ -2,7 +2,7 @@
 """UserPromptSubmit hook: keep API keys out of Claude's context.
 
 - A prompt made only of KEY=value lines (optionally prefixed with `secret`,
-  `export`, or quoted values) is written into server/.env and blocked, so the
+  `export`, or quoted values) is written into the repo-root .env and blocked, so the
   model never sees it.
 - Any other prompt that looks like it contains a secret is blocked unsent.
 
@@ -53,7 +53,7 @@ def main() -> None:
     data = json.load(sys.stdin)
     prompt = data.get("prompt", "")
     root = os.environ.get("CLAUDE_PROJECT_DIR") or data.get("cwd") or os.getcwd()
-    env_rel = os.environ.get("SECRET_ENV_FILE", "server/.env")
+    env_rel = os.environ.get("SECRET_ENV_FILE", ".env")
 
     body = re.sub(r"^\s*secret[:\s]+", "", prompt, flags=re.I)
     lines = [l for l in body.splitlines() if l.strip()]
