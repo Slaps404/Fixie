@@ -20,6 +20,7 @@ export interface DirEntry {
   lane: string | null;
   mode: 'live' | 'sim' | null;
   textable: boolean;
+  /** Newest first. */
   jobIds: string[];
 }
 
@@ -103,7 +104,10 @@ function rosterEntries(allJobs: Job[]): DirEntry[] {
   if (!r) return [];
   const jobIdsFor = (e: RosterEntry) => {
     const k = phoneKey(e.phone);
-    return allJobs.filter((j) => phoneKey(j.customer?.phone) === k || j.calls.some((c) => phoneKey(c.to) === k)).map((j) => j.id);
+    return allJobs
+      .filter((j) => phoneKey(j.customer?.phone) === k || j.calls.some((c) => phoneKey(c.to) === k))
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .map((j) => j.id);
   };
   const row = (e: RosterEntry, kind: DirectoryKind): DirEntry => ({
     key: `roster:${e.id}`,

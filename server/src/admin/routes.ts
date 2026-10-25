@@ -250,7 +250,7 @@ export function register(app: Express): void {
       body,
       ...result,
       source: 'admin',
-      jobId: entry.jobIds.at(-1) ?? null,
+      jobId: entry.jobIds[0] ?? null,
     });
     res.json({ ok: result.status !== 'failed', message: messageView(stored, dir, reveal(req)) });
   });
