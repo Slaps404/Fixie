@@ -86,7 +86,7 @@ test('auth: x-admin token accepted, wrong or missing token rejected', async () =
   assert.equal((await fetch(`${base}/admin/api/state`, { headers: { authorization: basic } })).status, 200);
 });
 
-test('reveal=0 masks every phone, reveal=1 shows full numbers', async () => {
+test('reveal=0 masks every phone but Fixie\'s own line, reveal=1 shows full numbers', async () => {
   const phones: string[] = [];
   const walk = (v: unknown): void => {
     if (Array.isArray(v)) v.forEach(walk);
@@ -97,9 +97,13 @@ test('reveal=0 masks every phone, reveal=1 shows full numbers', async () => {
       }
     }
   };
-  walk(await state(0));
-  assert.ok(phones.length > 8, `saw ${phones.length} phone fields`);
-  assert.ok(phones.every((p) => /^···\d{4}$/.test(p)), `masked: ${phones.join(' ')}`);
+  const masked = await state(0);
+  walk(masked);
+  const fixie = masked.directory.find((e: any) => e.key === 'fixie').phone;
+  assert.equal(fixie, '+16197711086', 'our own public line is never masked');
+  const others = phones.filter((p) => p !== fixie);
+  assert.ok(others.length > 8, `saw ${others.length} phone fields`);
+  assert.ok(others.every((p) => /^···\d{4}$/.test(p)), `masked: ${others.join(' ')}`);
   const full = await state(1);
   assert.equal(full.jobs.find((j: any) => j.id === dorothy.id).customer.phone, '+16195550100');
   assert.ok(full.directory.some((e: any) => e.phone === '+16195557777'));

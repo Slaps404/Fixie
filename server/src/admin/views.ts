@@ -15,7 +15,8 @@ export type Show = (phone: string | undefined | null) => string;
 export const showFor = (reveal: boolean): Show => (p) => (reveal ? (p ?? '') : maskPhone(p ?? ''));
 
 export const customerView = (c: Customer, show: Show) => ({ ...c, phone: show(c.phone), notes: c.notes.map(redact) });
-export const directoryView = (e: DirEntry, show: Show) => ({ ...e, phone: show(e.phone) });
+// Fixie's own line is public (it's on the landing page), so it is never masked.
+export const directoryView = (e: DirEntry, show: Show) => ({ ...e, phone: e.kind === 'fixie' ? e.phone : show(e.phone) });
 
 export function channels() {
   return {
