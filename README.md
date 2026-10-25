@@ -1,6 +1,11 @@
 <div align="center">
 
-<img src="assets/icon.svg" width="72" height="72" alt="Fixie">
+<img src="assets/readme/hero.png" width="100%" alt="Fixie landing page: Something broke? Call one number.">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
+  <img src="assets/logo-light.svg" width="64" height="64" alt="Fixie">
+</picture>
 
 # Fixie
 
@@ -16,8 +21,6 @@ calls you back for a spoken "order it", then talks you through the install.
 ![Tracks](https://img.shields.io/badge/tracks-No_App_·_Unsupervised_·_Dispatch-6E6AF0?style=flat-square)
 ![Tests](https://img.shields.io/badge/tests-119_passing-2EA043?style=flat-square)
 ![Stack](https://img.shields.io/badge/Vapi_·_Claude_·_TypeScript-333?style=flat-square)
-
-<img src="assets/readme/hero.png" width="860" alt="Fixie landing page: Something broke? Call one number.">
 
 </div>
 
