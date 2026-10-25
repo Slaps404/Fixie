@@ -13,3 +13,4 @@ server/data/roster.json
 .verify-artifacts/
 server/data/vault.json
 server/data/customers.json
+demo-assets/

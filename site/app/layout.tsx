@@ -11,12 +11,16 @@ export const metadata: Metadata = {
   icons: { icon: '/icon.svg' },
 };
 
+const FX_BOOT =
+  "var d=document.documentElement;d.classList.add('js');setTimeout(function(){if(!d.hasAttribute('data-fx'))d.classList.remove('js')},2500)";
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        {/* Before first paint, so scroll-reveal content starts hidden instead of flashing. */}
-        <script dangerouslySetInnerHTML={{ __html: "document.documentElement.classList.add('js')" }} />
+        {/* Before first paint, so scroll-reveal content starts hidden instead of flashing. If ScrollEffects
+            hasn't taken over within 2.5 s (script blocked, hydration error), drop the class so nothing stays hidden. */}
+        <script dangerouslySetInnerHTML={{ __html: FX_BOOT }} />
       </head>
       <body className={`${geist.className} antialiased`} style={{ background: 'var(--color-bg)', color: 'var(--color-text)' }}>
         {children}

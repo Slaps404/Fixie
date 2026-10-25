@@ -9,3 +9,7 @@ out
 # Recordings and cuts stay local.
 public/*.mp4
 footage/
+
+# Real call audio and transcripts, synced from demo-assets/ by scripts/sync-calls.mjs.
+public/calls/
+src/montage/calls.json

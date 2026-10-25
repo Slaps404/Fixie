@@ -7,6 +7,10 @@ import { useEffect } from 'react';
 // only ever grows, so the transcript never un-writes when you scroll back up.
 export function ScrollEffects() {
   useEffect(() => {
+    const root = document.documentElement;
+    // The boot script in layout.tsx already gave up and showed everything.
+    if (!root.classList.contains('js')) return;
+    root.setAttribute('data-fx', '');
     let pending = [...document.querySelectorAll<HTMLElement>('.reveal')];
     const moments = [...document.querySelectorAll<HTMLElement>('.tx')];
     const seen = new Map<HTMLElement, number>();
