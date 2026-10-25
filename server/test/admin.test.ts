@@ -258,7 +258,19 @@ test('responses: an online quote is a channel online response, rejected when a g
     j.quotes.push(quote({ vendorId: 'pricey', supplier: 'Pricey Parts', callId: '', source: 'online', landedTotal: 400, rejectedReason: 'over budget' }));
   });
   const rs: any[] = (await state(0)).responses;
-  const ok = rs.find((r) => r.id === `online:${priya.id}:repairclinic`);
+  const ok = rs.find((r) => r.jobId === priya.id && r.vendorId === 'repairclinic');
   assert.deepEqual([ok.channel, ok.outcome, ok.chosen, ok.quote.url], ['online', 'quoted', false, 'https://example.test/p']);
-  assert.equal(rs.find((r) => r.id === `online:${priya.id}:pricey`).outcome, 'rejected');
+  assert.equal(rs.find((r) => r.jobId === priya.id && r.vendorId === 'pricey').outcome, 'rejected');
+});
+
+test('responses: several listings from one retailer get distinct ids and only the best deal is chosen', async () => {
+  const cheap = quote({ vendorId: 'online:walmart', supplier: 'Walmart', callId: '', source: 'online', url: 'https://example.test/a', landedTotal: 12 });
+  jobs.update(priya.id, (j) => {
+    j.quotes.push(cheap, quote({ vendorId: 'online:walmart', supplier: 'Walmart', callId: '', source: 'online', url: 'https://example.test/b', landedTotal: 19 }));
+    j.bestDeal = { ...cheap };
+  });
+  const walmart: any[] = (await state(0)).responses.filter((r: any) => r.jobId === priya.id && r.vendorId === 'online:walmart');
+  assert.equal(walmart.length, 2);
+  assert.equal(new Set(walmart.map((r) => r.id)).size, 2, 'ids are unique');
+  assert.deepEqual(walmart.filter((r) => r.chosen).map((r) => r.quote.landedTotal), [12]);
 });

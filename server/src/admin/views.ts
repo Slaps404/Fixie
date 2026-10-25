@@ -73,10 +73,11 @@ export function responsesView() {
         transcript: transcriptFor(rec.callId),
       });
     }
-    for (const q of job.quotes) {
-      if (q.source !== 'online') continue;
+    job.quotes.forEach((q, i) => {
+      if (q.source !== 'online') return;
       out.push({
-        id: `online:${job.id}:${q.vendorId}`,
+        // One retailer can list the part several times, so the vendorId alone is not unique.
+        id: `online:${job.id}:${i}`,
         jobId: job.id,
         partNumber,
         vendorId: q.vendorId,
@@ -88,12 +89,16 @@ export function responsesView() {
         endedReason: null,
         durationSec: null,
         quote: quoteView(q),
-        chosen: job.bestDeal?.source === 'online' && job.bestDeal.vendorId === q.vendorId,
+        chosen: sameOnlineQuote(job.bestDeal, q),
         transcript: [] as TLine[],
       });
-    }
+    });
   }
   return out.sort((a, b) => b.at - a.at);
+}
+
+function sameOnlineQuote(best: Job['bestDeal'], q: Job['quotes'][number]): boolean {
+  return best?.source === 'online' && best.vendorId === q.vendorId && (best.url ?? null) === (q.url ?? null) && best.landedTotal === q.landedTotal;
 }
 
 // ---------- orders ----------
