@@ -5,7 +5,7 @@ import type { CallCtx, CallEvent, CallRegistry, EndReason, Orchestrator, ToolNam
 import type { Lane } from '../types.ts';
 
 export interface WebhookDeps {
-  calls: Pick<CallRegistry, 'get' | 'register'>;
+  calls: Pick<CallRegistry, 'get' | 'register' | 'update'>;
   orchestrator: Pick<Orchestrator, 'onCallEvent'>;
 }
 
@@ -25,10 +25,14 @@ const TOOL_NAMES: ToolName[] = [
   'send_text',
   'save_note',
   'mark_delivered',
+  'job_details',
+  'web_search',
 ];
 const FALLBACK_RESULT = 'Saved. Keep the conversation going.';
 /** Tool replies must leave in < 1 s. */
 const TOOL_BUDGET_MS = 900;
+/** web_search waits on Exa; the agent has already said it's looking it up. */
+const SEARCH_BUDGET_MS = 5500;
 const UNKNOWN_WAIT_MS = 3000;
 const POLL_MS = 250;
 
@@ -211,8 +215,16 @@ export function createWebhookHandler(deps?: WebhookDeps) {
   const toolCache = new Map<string, Promise<string>>();
   const chains = new Map<string, Promise<void>>();
 
-  /** Make sure calls.get(callId) resolves: id map → wait (outbound) → call.name / metadata → inbound user ctx. */
   async function ensureCtx(d: WebhookDeps, call: any, waitMs: number): Promise<void> {
+    await registerCtx(d, call, waitMs);
+    // Inbound calls only learn their controlUrl from webhook payloads (assistant monitorPlan.controlEnabled).
+    const controlUrl = call?.monitor?.controlUrl;
+    const ctx = d.calls.get(String(call?.id ?? ''));
+    if (ctx && typeof controlUrl === 'string' && controlUrl && !ctx.controlUrl) d.calls.update(ctx.callId, { controlUrl });
+  }
+
+  /** Make sure calls.get(callId) resolves: id map → wait (outbound) → call.name / metadata → inbound user ctx. */
+  async function registerCtx(d: WebhookDeps, call: any, waitMs: number): Promise<void> {
     const callId = String(call?.id ?? '');
     if (!callId || d.calls.get(callId)) return;
     const type = callTypeOf(call);
@@ -278,7 +290,8 @@ export function createWebhookHandler(deps?: WebhookDeps) {
       }
       return p;
     });
-    const remaining = Math.max(300, TOOL_BUDGET_MS - (Date.now() - started));
+    const budget = entries.some((t) => t.name === 'web_search') ? SEARCH_BUDGET_MS : TOOL_BUDGET_MS;
+    const remaining = Math.max(300, budget - (Date.now() - started));
     const timeout = new Promise<string>((r) => setTimeout(() => r(FALLBACK_RESULT), remaining));
     const settled = await Promise.all(promises.map((p) => Promise.race([p, timeout])));
     entries.forEach((t, i) => results.push({ name: t.name, toolCallId: t.toolCallId, result: settled[i] }));

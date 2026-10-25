@@ -1,20 +1,25 @@
-Calls in before the callback: "did you find my part? how much?" (intake; agent claude-sonnet-5; ended agent_end_call; 3 agent turns, 27.5 words/turn)
+Calls in before the callback: "did you find my part? how much?" (intake; agent claude-haiku-5-5; ended agent_end_call; 5 agent turns, 22.5 words/turn)
 
   0 FIXIE : Hi, I'm Fixie, an AI assistant. This call is recorded. Is it OK to continue, and OK to call you back on this number?
-  1 CALLER: Oh, yes, that's fine. I've been waiting on you about my dryer. Did you find the part, and how much is it?
-  2 FIXIE : Let me check your file for the dryer job.
+  1 CALLER: Oh, yes, that's fine. I'm Dorothy. I called about my dryer. It won't heat up. Did you find the part, and how much is it?
+  2 FIXIE : Thank you, Dorothy, let me pull up your details.
    [tool lookup_caller({}) → Greet: "Welcome back, Dorothy! It's Fixie again." Then ask if this is about their electric dryer WED4815EW again; if yes, you already have the model and purchase year, so don't ask. Returning caller: Dorothy. Known: has ]
-  4 FIXIE : Welcome back, Dorothy! The part we need is a thermal fuse for your dryer, and it comes to thirteen dollars and five cents with shipping, arriving Tuesday. Would you like me to go ahead and order it?
-  5 CALLER: Yes, order it. Thirteen dollars is fine. Thank you, goodbye.
-  6 FIXIE : Thank you, Dorothy, I'll get that ordered right away.
+   [tool save_note({"note":"Returning caller Dorothy; electric dryer WED4815EW (2019) no heat; thermal fuse WP3392519 quoted $13.05 landed, arrives Tuesday. No multimeter."}) → Saved.]
+  5 FIXIE : Welcome back, Dorothy, it's Fixie again. Is this about your electric dryer, model WED4815EW, again?
+  6 CALLER: Yes, that's the one. It's a Whirlpool, and it runs but never gets hot. Did you find the part yet?
+  7 FIXIE : Yes, Dorothy, we found the part. It's a thermal fuse, part number WP3392519, and it costs $13.05 with shipping, arriving Tuesday. Would you like me to order it at that price?
+  8 CALLER: Yes, order it.
    [tool record_order_decision({"approved":true}) → Done, I ordered the part. I'll call you when it arrives to help you install it. Is there anything else I can help you with?]
+ 10 FIXIE : Your part is ordered, Dorothy, and it should arrive Tuesday. I'll call you when it arrives to walk you through the install. Is there anything else you need today?
+ 11 CALLER: No, that's all. Thank you, goodbye.
+ 12 FIXIE : You're welcome, Dorothy. Take care, goodbye.
    [tool end_call({}) → Call ended.]
 
 Checks:
 max_turns: pass
 concise: pass
 no_payment: pass
-no_filler: fail ("Let me check your file for the dryer job.")
+no_filler: pass
 lookup_first: pass
 order_recorded: pass
 no_new_job: pass

@@ -11,7 +11,15 @@ import { config } from '../src/config.ts';
 function harness() {
   const map = new Map<string, CallCtx>();
   const seen: CallEvent[] = [];
-  const calls = { get: (id: string) => map.get(id), register: (c: CallCtx) => void map.set(c.callId, c) };
+  const calls = {
+    get: (id: string) => map.get(id),
+    register: (c: CallCtx) => void map.set(c.callId, c),
+    update: (id: string, patch: Partial<CallCtx>) => {
+      const c = map.get(id);
+      if (c) Object.assign(c, patch);
+      return c;
+    },
+  };
   let toolRuns = 0;
   const orchestrator = {
     async onCallEvent(e: CallEvent) {
@@ -243,7 +251,7 @@ test('buildAssistant matches the SPEC §6 shape', () => {
     job: { ...job, bestDeal: { supplier: 'PartsDirect', price: 15, shipping: 0, landedTotal: 15, inStock: true, eta: 'Tuesday' } as any },
     attempt: 1,
   }) as any;
-  assert.match(priced.firstMessage, /\$15\.00 total with shipping, arriving Tuesday\. Want me to order it\?$/);
+  assert.match(priced.firstMessage, /fifteen dollars total with shipping, arriving Tuesday\. Want me to order it\?$/);
 
   const d = buildAssistant({ lane: 'delivery', job, attempt: 1 }) as any;
   const deliveryTools = d.model.tools.filter((t: any) => t.type === 'function').map((t: any) => t.function.name);

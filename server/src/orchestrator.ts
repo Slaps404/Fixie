@@ -14,6 +14,10 @@ import { initialState, isConfident, loadFaultTree, nextTest, observe, reasonFor,
 import type { DiagnosisState, FaultTest, FaultTree } from './diagnosis.ts';
 import { getProfile, isConcept, knownFacts, knowsConcept, normalizePhone, rememberAppliance, rememberJob, rememberKnowledge, rememberNote, summarize, updateProfile } from './memory.ts';
 import { sendWhatsApp, whatsappEnabled } from './notify/whatsapp.ts';
+import { expert, type ExpertFacts } from './expert.ts';
+import { jobDetails, jobSummary } from './history.ts';
+import { webSearch } from './search.ts';
+import type { GuardVerdict } from './types.ts';
 import { getOnlineQuotes, toQuote } from './commerce/online-quotes.ts';
 import { placeOrder, resetOrders, revokeCards } from './commerce/place-order.ts';
 
@@ -111,6 +115,26 @@ function guardEv(job: Job, data: Record<string, unknown>, ctx?: Pick<CallCtx, 'm
   bump(guardsFired, job.id);
   return ev(job, 'guard', { approvedBy: 'code', ...data }, ctx);
 }
+/** Server state for the reasoning layer, read fresh at each consult. */
+function expertFacts(ctx: CallCtx): ExpertFacts {
+  const job = ctx.jobId ? jobs.get(ctx.jobId) : undefined;
+  const entry = diagByCall.get(ctx.callId);
+  const isIntake = !job || job.intakeCallId === ctx.callId;
+  return {
+    lane: ctx.lane === 'delivery' ? 'delivery' : isIntake ? 'intake' : 'callback',
+    appliance: job?.appliance,
+    model: job?.model,
+    part: job?.part ? `${job.part.name} ${job.part.partNumber}` : undefined,
+    diagnosis: entry?.state ?? job?.diagnosis,
+    memory: summarize(getProfile(entry?.phone || job?.customer.phone || ctx.to)),
+  };
+}
+
+/** Gas appliances are licensed-pro work even without a smell; a smell is the 911 path in guards.safetyKeywords. */
+function gasAppliance(text: string): GuardVerdict | null {
+  return /\bgas\b/i.test(text) ? { ok: false, kind: 'safety', action: 'escalated', detail: 'Gas appliance: repairs need a licensed pro. Pro required, no DIY.' } : null;
+}
+
 function snapshot(job: Job) {
   jobs.update(job.id, () => {});
 }
@@ -210,7 +234,7 @@ function handleLookupCaller(e: Extract<CallEvent, { kind: 'tool' }>): string {
   const phone = callerPhone(e);
   const profile = phone ? getProfile(phone) : undefined;
   const open = openJobFor(e);
-  const out = `${summarize(profile)}${open ? ` ${statusLine(open)}` : ''}`;
+  const out = `${summarize(profile)}${open ? ` ${statusLine(open)}\nHistory: ${jobSummary(open)}` : ''}`;
   const known = knownFacts(profile);
   if (profile?.name) known.unshift(`name: ${profile.name}`);
   for (const a of profile?.appliances ?? []) known.push(`appliance: ${a.appliance} ${a.model}${a.purchaseYear ? ` (${a.purchaseYear})` : ''}`.trim());
@@ -417,7 +441,7 @@ function handleStartJob(e: Extract<CallEvent, { kind: 'tool' }>): string {
       note(job, `start_job arrived without a model; used the diagnosis lead (${hyp.name}, P=${hit.confidence}).`, simFlag(job, sim));
     }
   }
-  const danger = guards.safetyKeywords(`${symptom} ${str(a.appliance)} ${model}`);
+  const danger = guards.safetyKeywords(`${symptom} ${str(a.appliance)} ${model}`) ?? gasAppliance(`${symptom} ${str(a.appliance)}`);
 
   if (!hit) {
     ev(job, 'diagnosis', { appliance: str(a.appliance) || 'appliance', model, issue: 'Unknown: model not in the seeded catalog', confidence: 0, label: 'lookup prior' }, sim);
@@ -1139,6 +1163,17 @@ async function handleTool(e: Extract<CallEvent, { kind: 'tool' }>): Promise<stri
   if (e.name === 'record_test') return handleRecordTest(e);
   if (e.name === 'send_text') return handleSendText(e);
   if (e.name === 'save_note') return handleSaveNote(e);
+  if (e.name === 'web_search') {
+    const query = str(e.args.query);
+    const out = await webSearch(query);
+    const ctx = calls.get(e.callId);
+    emit(ctx?.jobId ?? null, 'note', { kind: 'web_search', callId: e.callId, query, text: `Searched the web: "${query}"` }, { simulated: ctx?.mode === 'sim' || e.callId.startsWith('sim') });
+    return out;
+  }
+  if (e.name === 'job_details') {
+    const job = openJobFor(e) ?? jobs.byCaller(callerPhone(e));
+    return job ? jobDetails(job) : 'No job on file for this caller yet.';
+  }
   if (!calls.get(e.callId)?.jobId) openJobFor(e);
   if (e.name === 'safety_ack' && !calls.get(e.callId)?.jobId) return handleIntakeAck(e);
   const ctx = calls.get(e.callId);
@@ -1265,6 +1300,7 @@ export const orchestrator: Orchestrator = {
       const job = ctx?.jobId ? jobs.get(ctx.jobId) : undefined;
 
       if (e.kind === 'ended') {
+        expert.end(e.callId);
         await handleEnded(e);
         return undefined;
       }
@@ -1285,6 +1321,9 @@ export const orchestrator: Orchestrator = {
       if (e.kind === 'transcript') {
         const lane = ctx?.lane ?? 'user';
         ev(job ?? null, 'transcript', { callId: e.callId, lane, speaker: speakerFor(lane, e.role), text: e.text }, ctx ?? (e.callId.startsWith('sim') ? { mode: 'sim' } : null));
+        if (ctx && (lane === 'user' || lane === 'delivery')) {
+          void expert.onTranscript(ctx, e.role === 'other' ? 'caller' : 'agent', e.text, () => expertFacts(ctx));
+        }
         if (job && e.role === 'other' && (lane === 'user' || lane === 'delivery') && !safetyFlagged.has(e.callId)) {
           const v = guards.safetyKeywords(e.text);
           if (v && !v.ok) {
@@ -1374,6 +1413,7 @@ export const orchestrator: Orchestrator = {
     voicemailsSkipped.clear();
     diagByCall.clear();
     inboundAttached.clear();
+    expert.reset();
     onlinePending.clear();
     resetOrders();
   },

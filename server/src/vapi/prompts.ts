@@ -2,6 +2,8 @@
 import type { AssistantSpec } from '../contracts.ts';
 import type { Job } from '../types.ts';
 import { getProfile } from '../memory.ts';
+import { moneyForSpeech, spellForSpeech } from './speech.ts';
+import { jobSummary } from '../history.ts';
 
 export type PromptLane = 'intake' | 'warranty' | 'supplier' | 'callback' | 'delivery' | 'tech';
 
@@ -18,15 +20,7 @@ const STYLE =
   'When you need a tool, first say one short sentence (under ten words) with real content in the same reply, then call the tool. Example: "Okay, the drum turns, that\'s good." That sentence plays while the tool runs, so there is no dead air. ' +
   'Never say "hold on", "one sec", "give me a moment", "let me check", "bear with me", or anything like it. After a result comes back, speak at once.';
 
-/** "W P 3 3 9, 2 5 1 9": easier for TTS and the listener. */
-export function spellPart(pn: string): string {
-  const chars = pn.replace(/[^A-Za-z0-9]/g, '').toUpperCase().split('');
-  const groups: string[] = [];
-  for (let i = 0; i < chars.length; i += 3) groups.push(chars.slice(i, i + 3).join(' '));
-  return groups.join(', ');
-}
-
-const money = (n: number | undefined) => (typeof n === 'number' ? `$${n.toFixed(2)}` : 'unknown');
+const money = (n: number | undefined) => (typeof n === 'number' ? moneyForSpeech(n) : 'unknown');
 
 export function callTime(job: Job): string {
   const intake = job.calls.find((c) => c.callId === job.intakeCallId);
@@ -63,11 +57,13 @@ const AGENT =
   'Call save_note whenever you learn something worth knowing next time or make a promise. ' +
   'When they show they do or do not know a term, call record_knowledge, and from then on describe parts by look and location. ' +
   'Never ask for their phone number, card, or address. Never invent prices, steps, or tool results. ' +
+  "Not sure of a fact? Don't guess: say you'll look it up and call web_search, then answer only from the results. For anything about their job (what a supplier or the warranty line said, other prices), use the history you have or call job_details. " +
+  "'Coach:' notes are from an expert behind you; use them next turn unless the caller said something newer, and never mention them. " +
   'Safety: smoke, burning, sparks, or a gas smell means stop using it and call a pro; for gas or smoke, leave the house and call 911.';
 
 const notesFor = (job: Job) => {
   const notes = getProfile(job.customer.phone)?.notes ?? [];
-  return notes.length ? `\nYour notes on this customer: ${notes.slice(-6).join('; ')}.` : '';
+  return `\nJob history: ${jobSummary(job)}${notes.length ? `\nYour notes on this customer: ${notes.slice(-6).join('; ')}.` : ''}`;
 };
 
 export function intakePrompt(): LanePrompt {
@@ -90,7 +86,7 @@ If a tool says to call a professional, say so kindly and end the call.`,
 function warrantyPrompt(job: Job): LanePrompt {
   const year = purchaseYear(job);
   return {
-    firstMessage: `Hi, this is an AI assistant on a recorded line, checking warranty on a customer's ${job.appliance || 'appliance'}. Can you look that up for me?`,
+    firstMessage: `Hi, this is an AI assistant on a recorded line, checking warranty on a customer's ${job.appliance || 'appliance'}, part ${job.part?.partNumber ? spellForSpeech(job.part.partNumber) : 'unknown'}. Can you look that up for me?`,
     system: `${STYLE}
 You are an AI assistant calling a manufacturer's warranty line for a customer. Facts: model ${job.model ?? 'unknown'}, purchased ${year ?? 'year unknown'}, needs part ${partNo(job)}, ${partName(job)}. Symptom: ${job.symptom ?? 'not working'}.
 Give the model, purchase year, and part. Ask if the part is covered under warranty.
@@ -102,10 +98,10 @@ function supplierPrompt(job: Job, vendorName?: string): LanePrompt {
   const pn = partNo(job);
   const xref = job.part?.crossRefs?.[0];
   return {
-    firstMessage: `Hi, this is an AI assistant on a recorded line, calling for a customer. Do you have part ${spellPart(pn)} in stock?`,
+    firstMessage: `Hi, this is an AI assistant on a recorded line, calling for a customer. Do you have part ${spellForSpeech(pn)} in stock?`,
     system: `${STYLE}
 You are an AI assistant calling ${vendorName ?? 'a parts supplier'} for a customer. You need part ${pn}${xref ? `, cross-reference ${xref}` : ''}: ${partName(job)}.
-Read the part number in chunks${xref ? ` and mention the cross-reference ${spellPart(xref)}` : ''}.
+Read the part number in chunks${xref ? ` and mention the cross-reference ${spellForSpeech(xref)}` : ''}.
 Go through these one at a time, and do not end the call until you have all of them:
 1. Is it in stock?
 2. Ask price and shipping together: "How much is it with shipping to San Diego?" If they only give the part price, ask: "And what's shipping on that?" If it's pickup only, note shipping as 0.

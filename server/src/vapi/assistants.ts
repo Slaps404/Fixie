@@ -153,6 +153,20 @@ const TOOL_DEFS: Record<ToolName, { description: string; parameters: JsonSchema 
       required: ['note'],
     },
   },
+  job_details: {
+    description:
+      "Everything that happened on this customer's job: diagnosis, the warranty answer, every supplier quote and what each supplier and the warranty line said, the order, notes. Use it before answering any question about the job you can't answer from what you already have.",
+    parameters: { type: 'object', properties: {} },
+  },
+  web_search: {
+    description:
+      "Search the web when you are not sure of a fact (a model's specs, a part, how something works, store hours). Say you'll look it up in the same reply. Answer only from the results.",
+    parameters: {
+      type: 'object',
+      properties: { query: { type: 'string', description: 'A specific search query, e.g. "Whirlpool WED4815EW thermal fuse location"' } },
+      required: ['query'],
+    },
+  },
   mark_delivered: {
     description: 'The customer says their ordered part has arrived. Records the delivery and returns how to start the install on this call.',
     parameters: { type: 'object', properties: {} },
@@ -185,6 +199,8 @@ const CUSTOMER_TOOLS: ToolName[] = [
   'send_text',
   'save_note',
   'record_knowledge',
+  'job_details',
+  'web_search',
 ];
 const LANE_TOOLS: Record<Lane | 'intake', ToolName[]> = {
   intake: ['lookup_caller', 'start_job', 'record_test', ...CUSTOMER_TOOLS],
@@ -224,21 +240,42 @@ const SILENCE_SEC: Record<Lane | 'intake', number> = {
   tech: 15,
 };
 
+const KEYTERMS = ['multimeter', 'thermal fuse', 'heating element', 'thermostat', 'breaker', 'Whirlpool', 'Maytag', 'Kenmore', 'Samsung', 'LG', 'GE', 'warranty'];
+
+/** Deepgram nova-3 with keyterm prompting, so model and part numbers transcribe right. */
+function transcriber(extra: Array<string | undefined>): object {
+  const keyterm = [...new Set([...KEYTERMS, ...extra.filter((t): t is string => !!t)])].slice(0, 20);
+  return { provider: 'deepgram', model: 'nova-3', language: 'en', smartFormat: true, keyterm };
+}
+const TRANSCRIBED_LANES = new Set<Lane | 'intake'>(['intake', 'user', 'delivery', 'supplier', 'warranty']);
+
+/** Re-prompt after customer silence; the counter resets whenever they speak. Vapi minimum timeoutSeconds is 2. */
+function speechTimeout(timeoutSeconds: number, prompt: string): object[] {
+  return [{ on: 'customer.speech.timeout', options: { timeoutSeconds, triggerMaxCount: 3, triggerResetMode: 'onUserSpeech' }, do: [{ type: 'say', prompt }] }];
+}
+const GONE_QUIET = speechTimeout(
+  5,
+  "The caller has gone quiet. In under 12 words: if you were cut off, say 'Sorry, go ahead' and repeat your last question; otherwise gently repeat your last question.",
+);
+const WORKING_QUIET = speechTimeout(25, "The caller is quiet, probably working. In under 12 words, ask if they're still on that step or need help.");
+
 /** Conversational lanes: ignore 1-2 word noise (2 let line noise cut the bot off mid-sentence on live calls), wait a beat before replying, denoise the line. Machine lanes keep Vapi defaults. */
 const CONVERSATION_TUNING = {
   stopSpeakingPlan: {
     numWords: 3,
     backoffSeconds: 1,
-    acknowledgementPhrases: ['okay', 'yeah', 'uh-huh', 'mm-hmm', 'right', 'got it', 'sure', 'yes'],
+    acknowledgementPhrases: ['ok', 'okay', 'uh huh', 'uh-huh', 'mhm', 'mm-hmm', 'mm hmm', 'yeah', 'yep', 'yup', 'right', 'alright', 'got it', 'sure', 'yes', 'I see', 'go on'],
   },
+  // Live-call control URL: the expert coach (expert.ts) inserts silent notes through it.
+  monitorPlan: { controlEnabled: true },
   // x = LiveKit's probability they're still talking. Capped at 2.2 s: uncapped, a trailing "like," left a caller in 8 s of silence, three times in one call.
   startSpeakingPlan: { waitSeconds: 0.3, smartEndpointingPlan: { provider: 'livekit', waitFunction: '300 + 1900 * x' } },
   backgroundSpeechDenoisingPlan: { smartDenoisingPlan: { enabled: true } },
 };
 const TUNING: Partial<Record<Lane | 'intake', object>> = {
-  intake: CONVERSATION_TUNING,
-  user: CONVERSATION_TUNING,
-  delivery: CONVERSATION_TUNING,
+  intake: { ...CONVERSATION_TUNING, hooks: GONE_QUIET },
+  user: { ...CONVERSATION_TUNING, hooks: GONE_QUIET },
+  delivery: { ...CONVERSATION_TUNING, hooks: WORKING_QUIET },
 };
 
 /** Customer calls run on Haiku too: same eval pass rate as Sonnet on the replayed live calls, ~0.5 s faster to first token per turn. */
@@ -260,6 +297,7 @@ function assemble(opts: {
   prompt: LanePrompt;
   maxSec: number;
   metadata?: Record<string, unknown>;
+  keyterms?: Array<string | undefined>;
 }): Record<string, unknown> {
   const a: Record<string, unknown> = {
     name: opts.name.slice(0, 40),
@@ -279,6 +317,7 @@ function assemble(opts: {
   };
   const v = voice();
   if (v) a.voice = v;
+  if (TRANSCRIBED_LANES.has(opts.lane)) a.transcriber = transcriber(opts.keyterms ?? []);
   Object.assign(a, TUNING[opts.lane]);
   if (opts.metadata) a.metadata = opts.metadata;
   return a;
@@ -291,6 +330,7 @@ export function buildAssistant(spec: AssistantSpec): Record<string, unknown> {
     lane: spec.lane,
     prompt: promptFor(spec),
     maxSec: config.maxSec[spec.lane],
+    keyterms: [spec.job.model, spec.job.part?.partNumber],
     metadata: {
       jobId: spec.job.id,
       vendorId: spec.vendor?.id ?? null,

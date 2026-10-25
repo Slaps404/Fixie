@@ -52,6 +52,11 @@ export function emit(
   return ev;
 }
 
+/** This process's events for one job, oldest first. */
+export function eventsFor(jobId: string): FixieEvent[] {
+  return history.filter((e) => e.jobId === jobId);
+}
+
 export function resetEvents(): void {
   history.length = 0;
   for (const res of clients) res.write(`event: reset\ndata: {}\n\n`);
